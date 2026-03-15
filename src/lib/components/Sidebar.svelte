@@ -1,5 +1,6 @@
 <script lang="ts">
   import { currentPage, navigateTo, toggleTheme, theme } from '../stores/navigation';
+  import { authStatus, authLoading, discoveryLoading } from '../stores/auth';
   import type { Page } from '../types';
 
   const navGroups: { label?: string; items: { id: Page; icon: string; name: string; badge?: string; live?: boolean }[] }[] = [
@@ -66,14 +67,35 @@
   </div>
 
   <div class="sidebar-footer">
-    <div class="avatar">MJ</div>
-    <div class="user-info">
-      <div class="user-name">MJ Peña</div>
-      <div class="user-org">Contoso · OAuth</div>
-    </div>
+    {#if $authStatus.signed_in}
+      <div class="avatar">{$authStatus.user_name ? $authStatus.user_name.charAt(0).toUpperCase() : '?'}</div>
+      <div class="user-info">
+        <div class="user-name">{$authStatus.user_name ?? 'User'}</div>
+        <div class="user-org">{$authStatus.auth_mode === 'cli' ? 'Azure CLI' : $authStatus.auth_mode ?? ''}{$authStatus.tenant_id ? ` · ${$authStatus.tenant_id.slice(0,8)}…` : ''}</div>
+      </div>
+    {:else}
+      <div class="avatar" style="background:var(--bg-3)">?</div>
+      <div class="user-info">
+        <div class="user-name" style="color:var(--text-3)">Not signed in</div>
+      </div>
+    {/if}
     <button class="btn-icon" onclick={toggleTheme} title="Toggle theme">
       {$theme === 'dark' ? '🌙' : '☀️'}
     </button>
+  </div>
+
+  <div class="sidebar-connection">
+    {#if $authLoading || $discoveryLoading}
+      <span class="conn-dot conn-dot--loading"></span>
+      <span class="conn-label">Connecting…</span>
+    {:else if $authStatus.signed_in}
+      <span class="conn-dot conn-dot--connected"></span>
+      <span class="conn-label">Connected</span>
+      <span class="conn-badge">{$authStatus.auth_mode === 'cli' ? 'CLI' : $authStatus.auth_mode === 'oauth' ? 'OAuth' : $authStatus.auth_mode}</span>
+    {:else}
+      <span class="conn-dot conn-dot--disconnected"></span>
+      <span class="conn-label">Not connected</span>
+    {/if}
   </div>
 </nav>
 
@@ -129,4 +151,30 @@
   .user-info { flex: 1; min-width: 0; }
   .user-name { font-size: .82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .user-org { font-size: .68rem; color: var(--text-3); }
+  .sidebar-connection {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--border);
+    font-size: .7rem;
+    color: var(--text-3);
+  }
+  .conn-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  }
+  .conn-dot--connected { background: #34d399; }
+  .conn-dot--loading { background: #fbbf24; animation: conn-pulse 1s ease-in-out infinite; }
+  .conn-dot--disconnected { background: var(--text-3); opacity: .4; }
+  @keyframes conn-pulse {
+    0%, 100% { opacity: .4; }
+    50% { opacity: 1; }
+  }
+  .conn-label { flex: 1; }
+  .conn-badge {
+    font-size: .6rem; font-weight: 600; text-transform: uppercase;
+    padding: 1px 6px; border-radius: 99px;
+    background: rgba(99,102,241,.12); color: var(--brand);
+    letter-spacing: .03em;
+  }
 </style>
