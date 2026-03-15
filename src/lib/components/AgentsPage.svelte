@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { agents as mockAgents } from '../stores/data';
   import { navigateTo } from '../stores/navigation';
   import { activeEndpoint, authStatus } from '../stores/auth';
   import * as api from '../services/api';
@@ -10,8 +9,6 @@
   let liveAgents = $state<Agent[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
-
-  const placeholderAgents = mockAgents.filter(a => a.source !== 'foundry');
 
   function mapFoundryAgent(fa: FoundryAgent): Agent {
     return {
@@ -49,12 +46,8 @@
     if (endpoint) loadAgents(endpoint);
   }
 
-  let allAgents = $derived(
-    $authStatus.signed_in ? [...liveAgents, ...placeholderAgents] : mockAgents
-  );
-
   let filtered = $derived(
-    filter === 'all' ? allAgents : allAgents.filter(a => a.source === filter)
+    filter === 'all' ? liveAgents : liveAgents.filter(a => a.source === filter)
   );
 
   const sourceLabel: Record<string, string> = { foundry: 'Foundry', studio: 'Studio', m365: 'M365', local: 'Local' };
@@ -81,10 +74,10 @@
 {/if}
 
 <div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">
-  <button class="filter-chip" class:active={filter === 'all'} onclick={() => filter = 'all'}>All ({allAgents.length})</button>
-  {#each ['foundry', 'studio', 'm365', 'local'] as src}
+  <button class="filter-chip" class:active={filter === 'all'} onclick={() => filter = 'all'}>All ({liveAgents.length})</button>
+  {#each ['foundry'] as src}
     <button class="filter-chip" class:active={filter === src} onclick={() => filter = src}>
-      {sourceIcon[src]} {sourceLabel[src]} ({allAgents.filter(a => a.source === src).length})
+      {sourceIcon[src]} {sourceLabel[src]} ({liveAgents.filter(a => a.source === src).length})
     </button>
   {/each}
 </div>

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { runs as mockRuns } from '../stores/data';
   import { activeEndpoint, authStatus } from '../stores/auth';
   import * as api from '../services/api';
   import type { FineTuningJob, BatchJob } from '../services/api';
@@ -80,7 +79,7 @@
     if (endpoint) loadRuns(endpoint);
   }
 
-  let allRuns = $derived($authStatus.signed_in ? liveRuns : mockRuns);
+  let allRuns = $derived(liveRuns);
 
   let filteredRuns = $derived(
     filter === 'all' ? allRuns

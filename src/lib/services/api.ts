@@ -16,7 +16,6 @@ export interface AuthConfig {
 export interface Subscription {
   subscription_id: string;
   display_name: string;
-  state: string;
 }
 
 export interface Workspace {
@@ -30,7 +29,7 @@ export interface Workspace {
 }
 
 export interface HubDetail {
-  hub: Workspace;
+  workspace: Workspace;
   projects: Workspace[];
   endpoint: string | null;
   deployments: ArmDeployment[];
@@ -39,24 +38,25 @@ export interface HubDetail {
 
 export interface DiscoveryResult {
   subscriptions: Subscription[];
+  workspaces: Workspace[];
   hubs: HubDetail[];
 }
 
 export interface ArmDeployment {
   name: string;
   properties: {
-    model?: { name: string; version: string; format: string };
-    provisioning_state: string;
-    sku?: { name: string; capacity: number };
+    provisioning_state?: string;
+    model?: { name: string; version?: string };
   };
+  sku?: { name: string; capacity?: number };
 }
 
 export interface ArmConnection {
-  id: string;
   name: string;
   properties: {
-    category: string;
+    category?: string;
     target?: string;
+    metadata?: { resource_id?: string };
   };
 }
 
@@ -121,11 +121,12 @@ export interface FoundryModel {
 }
 
 export interface FoundryConnection {
-  id: string;
+  id?: string;
   name: string;
   properties: {
-    category: string;
+    category?: string;
     target?: string;
+    auth_type?: string;
   };
 }
 

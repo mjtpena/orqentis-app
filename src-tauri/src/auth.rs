@@ -526,45 +526,59 @@ async fn refresh_token(
 // ---------------------------------------------------------------------------
 
 /// Return a valid access token, refreshing silently if near expiry.
+/// Falls back to Azure CLI when no keychain token is stored.
 pub async fn get_token() -> Result<String> {
-    let stored = get_stored_token()?.ok_or(AuthError::NoRefreshToken)?;
-
-    if !stored.is_near_expiry() {
-        return Ok(stored.access_token);
+    match get_stored_token()? {
+        Some(stored) if !stored.is_near_expiry() => {
+            return Ok(stored.access_token);
+        }
+        Some(stored) => {
+            // Try refresh
+            if let Some(rt) = stored.refresh_token.as_deref() {
+                let config = AuthConfig {
+                    tenant_id: stored.tenant_id.clone(),
+                    client_id: stored.client_id.clone(),
+                };
+                match refresh_token(&config, rt, DEFAULT_SCOPE).await {
+                    Ok(refreshed) => {
+                        save_token(&refreshed)?;
+                        return Ok(refreshed.access_token);
+                    }
+                    Err(_) => {} // fall through to CLI
+                }
+            }
+        }
+        None => {}
     }
 
-    let rt = stored
-        .refresh_token
-        .as_deref()
-        .ok_or(AuthError::NoRefreshToken)?;
-
-    let config = AuthConfig {
-        tenant_id: stored.tenant_id.clone(),
-        client_id: stored.client_id.clone(),
-    };
-
-    let refreshed = refresh_token(&config, rt, DEFAULT_SCOPE).await?;
-    save_token(&refreshed)?;
-    Ok(refreshed.access_token)
+    // Fall back to Azure CLI
+    try_az_cli_token("https://cognitiveservices.azure.com").await
 }
 
 /// Exchange the stored refresh token for an access token with a different scope
 /// (e.g. ARM `https://management.azure.com/.default offline_access` or Graph).
+/// Falls back to Azure CLI when no keychain token is stored.
 pub async fn get_scoped_token(scope: &str) -> Result<String> {
-    let stored = get_stored_token()?.ok_or(AuthError::NoRefreshToken)?;
+    if let Ok(Some(stored)) = get_stored_token() {
+        if let Some(rt) = stored.refresh_token.as_deref() {
+            let config = AuthConfig {
+                tenant_id: stored.tenant_id.clone(),
+                client_id: stored.client_id.clone(),
+            };
+            if let Ok(scoped) = refresh_token(&config, rt, scope).await {
+                return Ok(scoped.access_token);
+            }
+        }
+    }
 
-    let rt = stored
-        .refresh_token
-        .as_deref()
-        .ok_or(AuthError::NoRefreshToken)?;
-
-    let config = AuthConfig {
-        tenant_id: stored.tenant_id.clone(),
-        client_id: stored.client_id.clone(),
-    };
-
-    let scoped = refresh_token(&config, rt, scope).await?;
-    Ok(scoped.access_token)
+    // Fall back to Azure CLI — extract the resource from the scope string
+    // e.g. "https://management.azure.com/.default offline_access" → "https://management.azure.com"
+    let resource = scope
+        .split_whitespace()
+        .next()
+        .unwrap_or(scope)
+        .trim_end_matches("/.default");
+    try_az_cli_token(resource).await
 }
 
 // ---------------------------------------------------------------------------

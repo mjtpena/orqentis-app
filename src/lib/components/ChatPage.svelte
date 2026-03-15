@@ -1,58 +1,45 @@
 <script lang="ts">
-  import { chatSessions, models as mockModels, agents as mockAgents } from '../stores/data';
-  import { activeEndpoint, authStatus } from '../stores/auth';
+  import { chatSessions } from '../stores/data';
+  import { activeEndpoint, authStatus, armDeployments } from '../stores/auth';
   import * as api from '../services/api';
-  import type { FoundryDeployment, ChatMessagePayload } from '../services/api';
+  import type { ArmDeployment, ChatMessagePayload, FoundryAgent } from '../services/api';
   import type { ChatMessage } from '../types';
   import { listen } from '@tauri-apps/api/event';
 
-  let messages = $state<ChatMessage[]>([
-    { id: '1', role: 'user', content: 'Summarize the Q4 2025 financial report. Focus on revenue growth, key risks, and strategic outlook.', timestamp: new Date() },
-    { id: '2', role: 'assistant', content: `**Q4 2025 Financial Summary**
-
-**Revenue Growth:** Total revenue increased 18% YoY to $4.2B, driven by cloud services (+24%) and AI platform adoption (+31%).
-
-**Key Risks:**
-- Increased competition in AI infrastructure
-- Regulatory uncertainty in EU and APAC
-- GPU supply chain constraints
-
-**Strategic Outlook:** Management expects 15-20% revenue growth in FY2026 with focus on agentic AI and expanded Copilot integrations.`, timestamp: new Date() },
-    { id: '3', role: 'user', content: 'What about operating margins vs Q3?', timestamp: new Date() },
-    { id: '4', role: 'assistant', content: `Operating margin improved to **42.3%** in Q4, up from 40.1% in Q3 (+220 bps):
-
-- **Gross margin:** 69.8% → 71.2% (cloud efficiency)
-- **R&D:** Flat at 14.2% despite AI investments
-- **S&M:** Down 80 bps to 13.7% via automation
-
-Highest operating margin in 8 quarters.`, timestamp: new Date() },
-  ]);
+  let messages = $state<ChatMessage[]>([]);
 
   let inputText = $state('');
   let isStreaming = $state(false);
   let chatMessagesEl: HTMLDivElement;
 
-  // Live deployments for model selector
-  let deployments = $state<FoundryDeployment[]>([]);
+  // Live deployments from ARM discovery and agents from Foundry
+  let liveAgents = $state<FoundryAgent[]>([]);
   let selectedDeployment = $state('');
   let deploymentsLoading = $state(false);
+
+  // Use ARM deployments directly from the store
+  let deployments = $derived($armDeployments);
 
   $effect(() => {
     const endpoint = $activeEndpoint;
     const status = $authStatus;
     if (status.signed_in && endpoint) {
       deploymentsLoading = true;
-      api.listFoundryDeployments(endpoint)
-        .then(data => {
-          deployments = data;
-          if (data.length > 0 && !selectedDeployment) {
-            selectedDeployment = data[0].id;
-          }
+      api.listAgents(endpoint)
+        .then((agents) => {
+          liveAgents = agents;
         })
         .catch(() => {})
         .finally(() => { deploymentsLoading = false; });
     } else {
-      deployments = [];
+      liveAgents = [];
+    }
+  });
+
+  // Auto-select first deployment when available
+  $effect(() => {
+    if (deployments.length > 0 && !selectedDeployment) {
+      selectedDeployment = deployments[0].name;
     }
   });
 
@@ -112,12 +99,10 @@ Highest operating margin in 8 quarters.`, timestamp: new Date() },
         if (isStreaming) isStreaming = false;
       }
     } else {
-      // Mock response when not connected
-      setTimeout(() => {
-        messages = [...messages, { id: crypto.randomUUID(), role: 'assistant', content: 'This is a prototype response. Sign in and select a deployment to chat with a real model.', timestamp: new Date() }];
-        isStreaming = false;
-        scrollToBottom();
-      }, 1500);
+      // Not connected — show a message
+      messages = [...messages, { id: crypto.randomUUID(), role: 'assistant', content: 'Please sign in and select a deployment to start chatting with a real model.', timestamp: new Date() }];
+      isStreaming = false;
+      scrollToBottom();
     }
   }
 
@@ -125,18 +110,18 @@ Highest operating margin in 8 quarters.`, timestamp: new Date() },
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
   }
 
-  const chatModels = mockModels.filter(m => m.status === 'online' && m.capabilities?.includes('chat'));
+  const chatModels: never[] = [];
 
   let topbarName = $derived(
     $authStatus.signed_in && selectedDeployment
-      ? deployments.find(d => d.id === selectedDeployment)?.model.name ?? selectedDeployment
-      : 'gpt-4o'
+      ? deployments.find(d => d.name === selectedDeployment)?.properties.model?.name ?? selectedDeployment
+      : 'Select a model'
   );
 
   let topbarDetail = $derived(
     $authStatus.signed_in && selectedDeployment
-      ? `Foundry · ${deployments.find(d => d.id === selectedDeployment)?.model.version ?? 'Live'}`
-      : 'Foundry · v2024-08-06 · East US'
+      ? `Foundry · ${deployments.find(d => d.name === selectedDeployment)?.properties.model?.version ?? 'Live'}`
+      : 'Sign in to connect'
   );
 </script>
 
@@ -164,8 +149,8 @@ Highest operating margin in 8 quarters.`, timestamp: new Date() },
 
     <div class="chat-list-body">
       <div class="list-label">Recent</div>
-      {#each chatSessions as session (session.id)}
-        <button class="chat-item" class:active={session.id === 's1'}>
+      {#each $chatSessions as session (session.id)}
+        <button class="chat-item" class:active={false}>
           <span class="chat-item-icon">{session.targetIcon}</span>
           <div class="chat-item-info">
             <div class="chat-item-name">{session.title}</div>
@@ -173,40 +158,38 @@ Highest operating margin in 8 quarters.`, timestamp: new Date() },
           </div>
         </button>
       {/each}
+      {#if $chatSessions.length === 0}
+        <div style="padding:8px 10px;font-size:.78rem;color:var(--text-3)">No chats yet. Start one below.</div>
+      {/if}
 
-      <div class="list-label" style="margin-top:12px">Targets</div>
+      <div class="list-label" style="margin-top:12px">Deployments</div>
       {#if $authStatus.signed_in && deployments.length > 0}
-        {#each deployments as d (d.id)}
-          <button class="chat-item" class:active={selectedDeployment === d.id} onclick={() => selectedDeployment = d.id}>
+        {#each deployments as d (d.name)}
+          <button class="chat-item" class:active={selectedDeployment === d.name} onclick={() => selectedDeployment = d.name}>
             <span class="chat-item-icon">🧠</span>
             <div class="chat-item-info">
-              <div class="chat-item-name">{d.model.name}</div>
+              <div class="chat-item-name">{d.properties.model?.name ?? d.name}</div>
               <div class="chat-item-sub">Foundry · {d.sku?.name || 'Deployment'}</div>
             </div>
             <div class="dot dot-green" style="margin-left:auto"></div>
           </button>
         {/each}
       {:else}
-        {#each chatModels as model (model.id)}
+        <div style="padding:8px 10px;font-size:.78rem;color:var(--text-3)">{$authStatus.signed_in ? 'No deployments found.' : 'Sign in to see deployments.'}</div>
+      {/if}
+
+      {#if liveAgents.length > 0}
+        <div class="list-label" style="margin-top:12px">Agents</div>
+        {#each liveAgents as agent (agent.id)}
           <button class="chat-item">
-            <span class="chat-item-icon">{model.source === 'local' ? '🏠' : '🧠'}</span>
+            <span class="chat-item-icon">🤖</span>
             <div class="chat-item-info">
-              <div class="chat-item-name">{model.name}</div>
-              <div class="chat-item-sub">{model.source === 'local' ? 'Local · Ollama' : `Foundry · ${model.sku || 'Online'}`}</div>
+              <div class="chat-item-name">{agent.name || agent.id}</div>
+              <div class="chat-item-sub">Foundry Agent · {agent.model}</div>
             </div>
-            <div class="dot dot-green" style="margin-left:auto"></div>
           </button>
         {/each}
       {/if}
-      {#each mockAgents.filter(a => ['active', 'running', 'published'].includes(a.status)) as agent (agent.id)}
-        <button class="chat-item">
-          <span class="chat-item-icon">{agent.source === 'foundry' ? '🤖' : agent.source === 'studio' ? '✨' : agent.source === 'local' ? '🏠' : '👤'}</span>
-          <div class="chat-item-info">
-            <div class="chat-item-name">{agent.name}</div>
-            <div class="chat-item-sub">{agent.source === 'foundry' ? `Foundry Agent · ${agent.model}` : agent.source === 'studio' ? 'Copilot Studio' : agent.source === 'local' ? `Local · ${agent.runtime}` : 'M365 Copilot'}</div>
-          </div>
-        </button>
-      {/each}
     </div>
   </div>
 

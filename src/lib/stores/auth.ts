@@ -16,18 +16,36 @@ export const discoveryResult = writable<DiscoveryResult | null>(null);
 export const discoveryLoading = writable(false);
 export const discoveryError = writable<string | null>(null);
 
-// Derived: the currently active endpoint (first hub with an endpoint)
-export const activeEndpoint = derived(discoveryResult, ($dr) => {
-  if (!$dr) return null;
-  for (const hub of $dr.hubs) {
-    if (hub.endpoint) return hub.endpoint;
-  }
-  return null;
-});
+// Which hub is currently selected (index into hubs array); defaults to first with endpoint
+export const selectedHubIndex = writable(0);
 
 // Derived: all hubs
 export const hubs = derived(discoveryResult, ($dr) => {
   return $dr?.hubs ?? [];
+});
+
+// Derived: currently selected hub detail
+export const activeHub = derived([hubs, selectedHubIndex], ([$hubs, $idx]) => {
+  if ($hubs.length === 0) return null;
+  // Try the selected index, otherwise find first with endpoint
+  if ($hubs[$idx]?.endpoint) return $hubs[$idx];
+  return $hubs.find(h => h.endpoint) ?? $hubs[0] ?? null;
+});
+
+// Derived: the currently active endpoint
+export const activeEndpoint = derived(activeHub, ($hub) => {
+  return $hub?.endpoint ?? null;
+});
+
+// Derived: subscription count
+export const subscriptionCount = derived(discoveryResult, ($dr) => $dr?.subscriptions.length ?? 0);
+
+// Derived: total workspace count
+export const workspaceCount = derived(discoveryResult, ($dr) => $dr?.workspaces.length ?? 0);
+
+// Derived: ARM deployments from the active hub
+export const armDeployments = derived(activeHub, ($hub) => {
+  return $hub?.deployments ?? [];
 });
 
 export async function checkAuth() {

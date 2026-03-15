@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { connections as mockConnections } from '../stores/data';
   import { activeEndpoint, authStatus } from '../stores/auth';
   import * as api from '../services/api';
   import type { FoundryConnection } from '../services/api';
@@ -8,9 +7,6 @@
   let liveConnections = $state<Connection[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
-
-  const mockM365 = mockConnections.filter(c => c.category === 'm365');
-  const mockLocal = mockConnections.filter(c => c.category === 'local');
 
   function detectCategory(cat: string): Connection['category'] {
     const lower = cat.toLowerCase();
@@ -21,10 +17,10 @@
 
   function mapConnection(c: FoundryConnection): Connection {
     return {
-      id: c.id,
+      id: c.id ?? c.name,
       name: c.name,
-      description: `${c.properties.category}${c.properties.target ? ` · ${c.properties.target}` : ''}`,
-      category: detectCategory(c.properties.category),
+      description: `${c.properties.category ?? 'Unknown'}${c.properties.target ? ` · ${c.properties.target}` : ''}`,
+      category: detectCategory(c.properties.category ?? ''),
       status: 'connected',
     };
   }
@@ -53,11 +49,7 @@
     if (endpoint) loadConnections(endpoint);
   }
 
-  let allConnections = $derived(
-    $authStatus.signed_in
-      ? [...liveConnections, ...mockM365, ...mockLocal]
-      : mockConnections
-  );
+  let allConnections = $derived(liveConnections);
 
   let azure = $derived(allConnections.filter(c => c.category === 'azure'));
   let m365 = $derived(allConnections.filter(c => c.category === 'm365'));

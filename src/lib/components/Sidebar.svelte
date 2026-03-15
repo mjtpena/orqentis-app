@@ -1,27 +1,27 @@
 <script lang="ts">
   import { currentPage, navigateTo, toggleTheme, theme } from '../stores/navigation';
-  import { authStatus, authLoading, discoveryLoading } from '../stores/auth';
+  import { authStatus, authLoading, discoveryLoading, hubs } from '../stores/auth';
   import type { Page } from '../types';
 
-  const navGroups: { label?: string; items: { id: Page; icon: string; name: string; badge?: string; live?: boolean }[] }[] = [
+  const navGroups: { label?: string; items: { id: Page; icon: string; name: string }[] }[] = [
     {
       items: [{ id: 'home', icon: '🏠', name: 'Home' }]
     },
     {
       label: 'Operate',
       items: [
-        { id: 'agents', icon: '🤖', name: 'Agents', badge: '7' },
-        { id: 'models', icon: '🧠', name: 'Models', badge: '10' },
+        { id: 'agents', icon: '🤖', name: 'Agents' },
+        { id: 'models', icon: '🧠', name: 'Models' },
         { id: 'chat', icon: '💬', name: 'Chat' },
-        { id: 'runs', icon: '▶️', name: 'Runs', badge: '2', live: true },
+        { id: 'runs', icon: '▶️', name: 'Runs' },
       ]
     },
     {
       label: 'Compose',
       items: [
-        { id: 'knowledge', icon: '📚', name: 'Knowledge', badge: '18' },
-        { id: 'tools', icon: '🔧', name: 'Tools', badge: '6' },
-        { id: 'connections', icon: '🔗', name: 'Connections', badge: '8' },
+        { id: 'knowledge', icon: '📚', name: 'Knowledge' },
+        { id: 'tools', icon: '🔧', name: 'Tools' },
+        { id: 'connections', icon: '🔗', name: 'Connections' },
       ]
     },
     {
@@ -57,9 +57,6 @@
           >
             <span class="nav-icon">{item.icon}</span>
             {item.name}
-            {#if item.badge}
-              <span class="nav-badge" class:live={item.live}>{item.badge}</span>
-            {/if}
           </button>
         {/each}
       </div>
@@ -71,7 +68,7 @@
       <div class="avatar">{$authStatus.user_name ? $authStatus.user_name.charAt(0).toUpperCase() : '?'}</div>
       <div class="user-info">
         <div class="user-name">{$authStatus.user_name ?? 'User'}</div>
-        <div class="user-org">{$authStatus.auth_mode === 'cli' ? 'Azure CLI' : $authStatus.auth_mode ?? ''}{$authStatus.tenant_id ? ` · ${$authStatus.tenant_id.slice(0,8)}…` : ''}</div>
+        <div class="user-org">{$authStatus.auth_mode === 'az_cli' ? 'Azure CLI' : $authStatus.auth_mode ?? ''}{$authStatus.tenant_id ? ` · ${$authStatus.tenant_id.slice(0,8)}…` : ''}</div>
       </div>
     {:else}
       <div class="avatar" style="background:var(--bg-3)">?</div>
@@ -90,8 +87,8 @@
       <span class="conn-label">Connecting…</span>
     {:else if $authStatus.signed_in}
       <span class="conn-dot conn-dot--connected"></span>
-      <span class="conn-label">Connected</span>
-      <span class="conn-badge">{$authStatus.auth_mode === 'cli' ? 'CLI' : $authStatus.auth_mode === 'oauth' ? 'OAuth' : $authStatus.auth_mode}</span>
+      <span class="conn-label">{$hubs.length} hub{$hubs.length !== 1 ? 's' : ''}</span>
+      <span class="conn-badge">{$authStatus.auth_mode === 'az_cli' ? 'CLI' : $authStatus.auth_mode === 'oauth' ? 'OAuth' : $authStatus.auth_mode}</span>
     {:else}
       <span class="conn-dot conn-dot--disconnected"></span>
       <span class="conn-label">Not connected</span>
@@ -134,11 +131,6 @@
     width: 3px; border-radius: 2px; background: var(--brand);
   }
   .nav-icon { width: 20px; text-align: center; font-size: .95rem; flex-shrink: 0; }
-  .nav-badge {
-    margin-left: auto; font-size: .65rem; font-weight: 600;
-    padding: 1px 7px; border-radius: 99px; background: var(--bg-3); color: var(--text-3);
-  }
-  .nav-badge.live { background: rgba(16,185,129,.15); color: #34d399; }
   .sidebar-footer {
     padding: 12px 14px; border-top: 1px solid var(--border);
     display: flex; align-items: center; gap: 10px;

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { knowledge as mockKnowledge } from '../stores/data';
   import { activeEndpoint, authStatus } from '../stores/auth';
   import * as api from '../services/api';
   import type { VectorStore, FoundryFile } from '../services/api';
@@ -9,10 +8,6 @@
   let liveFiles = $state<KnowledgeSource[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
-
-  const mockVectorStores = mockKnowledge.filter(k => k.type === 'vector_store');
-  const mockFiles = mockKnowledge.filter(k => k.type === 'file');
-  const mockConnected = mockKnowledge.filter(k => ['sharepoint', 'onedrive', 'local_dir'].includes(k.type));
 
   function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -78,9 +73,9 @@
     if (endpoint) loadKnowledge(endpoint);
   }
 
-  let vectorStores = $derived($authStatus.signed_in ? liveVectorStores : mockVectorStores);
-  let files = $derived($authStatus.signed_in ? liveFiles : mockFiles);
-  let connected = $derived(mockConnected);
+  let vectorStores = $derived(liveVectorStores);
+  let files = $derived(liveFiles);
+  let connected = $derived<KnowledgeSource[]>([]);
 
   const typeIcon: Record<string, string> = { vector_store: '🗃', file: '📄', sharepoint: '📂', onedrive: '☁️', local_dir: '📁' };
   const typeColor: Record<string, string> = { vector_store: 'rgba(168,85,247,.1)', file: 'rgba(28,194,188,.1)', sharepoint: 'rgba(26,137,240,.1)', onedrive: 'rgba(26,137,240,.1)', local_dir: 'rgba(245,158,11,.1)' };

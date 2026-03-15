@@ -1,13 +1,12 @@
 <script lang="ts">
-  import { agents as mockAgents, activityFeed } from '../stores/data';
   import { navigateTo } from '../stores/navigation';
-  import { activeEndpoint, authStatus } from '../stores/auth';
+  import { activeEndpoint, authStatus, hubs, armDeployments } from '../stores/auth';
+  import { activityFeed } from '../stores/data';
   import * as api from '../services/api';
   import type { Agent } from '../types';
   import type { FoundryAgent } from '../services/api';
 
-  let agentCount = $state<number | null>(null);
-  let modelCount = $state<number | null>(null);
+  let agentCount = $state(0);
   let liveAgents = $state<Agent[]>([]);
   let loading = $state(false);
 
@@ -28,32 +27,25 @@
     const status = $authStatus;
     if (status.signed_in && endpoint) {
       loading = true;
-      Promise.all([
-        api.listAgents(endpoint),
-        api.listFoundryDeployments(endpoint),
-      ])
-        .then(([agents, deployments]) => {
+      api.listAgents(endpoint)
+        .then((agents) => {
           liveAgents = agents.map(mapFoundryAgent);
           agentCount = agents.length;
-          modelCount = deployments.length;
         })
         .catch(() => {})
         .finally(() => { loading = false; });
     } else {
-      agentCount = null;
-      modelCount = null;
+      agentCount = 0;
       liveAgents = [];
     }
   });
 
-  let displayAgents = $derived(
-    $authStatus.signed_in && liveAgents.length > 0 ? liveAgents : mockAgents
-  );
+  let modelCount = $derived($armDeployments.length);
 
   let greeting = $derived(
     $authStatus.signed_in && $authStatus.user_name
-      ? `Good evening, ${$authStatus.user_name} 👋`
-      : 'Good evening 👋'
+      ? `Welcome, ${$authStatus.user_name} 👋`
+      : 'Welcome to Orqentis 👋'
   );
 </script>
 
@@ -71,19 +63,19 @@
 
 <div class="stats-row">
   <div class="stat">
-    <div class="stat-val">{agentCount !== null ? agentCount : 7}</div>
-    <div class="stat-label">{$authStatus.signed_in ? 'Foundry Agents' : 'Total Agents'}</div>
-    <div class="stat-sub" style="color:var(--text-3)">{$authStatus.signed_in ? 'From Azure AI Foundry' : '3 Foundry · 2 Studio · 1 M365 · 1 Local'}</div>
+    <div class="stat-val">{$authStatus.signed_in ? agentCount : '—'}</div>
+    <div class="stat-label">Foundry Agents</div>
+    <div class="stat-sub" style="color:var(--text-3)">{$authStatus.signed_in ? 'From Azure AI Foundry' : 'Sign in to view'}</div>
   </div>
   <div class="stat">
-    <div class="stat-val" style="color:var(--success)">{modelCount !== null ? modelCount : '5 / 10'}</div>
-    <div class="stat-label">{$authStatus.signed_in ? 'Deployments' : 'Models Online'}</div>
-    <div class="stat-sub">{$authStatus.signed_in ? 'Cloud model deployments' : '3 cloud · 2 local'}</div>
+    <div class="stat-val" style="color:var(--success)">{$authStatus.signed_in ? modelCount : '—'}</div>
+    <div class="stat-label">Deployments</div>
+    <div class="stat-sub">{$authStatus.signed_in ? 'Cloud model deployments' : 'Sign in to view'}</div>
   </div>
   <div class="stat">
-    <div class="stat-val">—</div>
-    <div class="stat-label">Active Runs</div>
-    <div class="stat-sub">{$authStatus.signed_in ? 'See Runs page' : 'support-agent, batch-classify'}</div>
+    <div class="stat-val">{$authStatus.signed_in ? $hubs.length : '—'}</div>
+    <div class="stat-label">Hubs</div>
+    <div class="stat-sub">{$authStatus.signed_in ? 'Azure AI Foundry hubs' : 'Sign in to view'}</div>
   </div>
   <div class="stat">
     <div class="stat-val">—</div>
@@ -116,9 +108,13 @@
       <div class="spinner"></div>
       <p>Loading…</p>
     </div>
+  {:else if liveAgents.length === 0}
+    <div class="empty-state" style="padding:1.5rem">
+      <p style="color:var(--text-3);font-size:.88rem">{$authStatus.signed_in ? 'No agents found in this project.' : 'Sign in to see your agents.'}</p>
+    </div>
   {:else}
     <div class="agent-grid">
-      {#each displayAgents.slice(0, 4) as agent}
+      {#each liveAgents.slice(0, 4) as agent}
         <button class="agent-card src-{agent.source}" onclick={() => navigateTo('chat')}>
           <div class="agent-header">
             <div class="agent-icon {agent.source}">
@@ -152,17 +148,23 @@
     <div class="section-title">Recent Activity</div>
   </div>
   <div class="card" style="padding:8px 16px">
-    <div class="feed">
-      {#each activityFeed as item}
-        <div class="feed-item">
-          <div class="dot dot-{item.color}" style="margin-top:6px"></div>
-          <div class="feed-body">
-            <div class="feed-text">{@html item.text}</div>
-            <div class="feed-time">{item.time} · {item.source}</div>
+    {#if $activityFeed.length > 0}
+      <div class="feed">
+        {#each $activityFeed as item}
+          <div class="feed-item">
+            <div class="dot dot-{item.color}" style="margin-top:6px"></div>
+            <div class="feed-body">
+              <div class="feed-text">{@html item.text}</div>
+              <div class="feed-time">{item.time} · {item.source}</div>
+            </div>
           </div>
-        </div>
-      {/each}
-    </div>
+        {/each}
+      </div>
+    {:else}
+      <div style="padding:16px 0;text-align:center;color:var(--text-3);font-size:.85rem">
+        {$authStatus.signed_in ? 'No recent activity yet.' : 'Sign in to see activity.'}
+      </div>
+    {/if}
   </div>
 </div>
 
