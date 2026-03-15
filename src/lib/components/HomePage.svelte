@@ -1,33 +1,94 @@
 <script lang="ts">
-  import { agents, activityFeed } from '../stores/data';
+  import { agents as mockAgents, activityFeed } from '../stores/data';
   import { navigateTo } from '../stores/navigation';
+  import { activeEndpoint, authStatus } from '../stores/auth';
+  import * as api from '../services/api';
+  import type { Agent } from '../types';
+  import type { FoundryAgent } from '../services/api';
+
+  let agentCount = $state<number | null>(null);
+  let modelCount = $state<number | null>(null);
+  let liveAgents = $state<Agent[]>([]);
+  let loading = $state(false);
+
+  function mapFoundryAgent(fa: FoundryAgent): Agent {
+    return {
+      id: fa.id,
+      name: fa.name,
+      description: fa.instructions || `Model: ${fa.model}`,
+      source: 'foundry',
+      model: fa.model,
+      status: 'active',
+      tools: fa.tools.map(t => t.type),
+    };
+  }
+
+  $effect(() => {
+    const endpoint = $activeEndpoint;
+    const status = $authStatus;
+    if (status.signed_in && endpoint) {
+      loading = true;
+      Promise.all([
+        api.listAgents(endpoint),
+        api.listFoundryDeployments(endpoint),
+      ])
+        .then(([agents, deployments]) => {
+          liveAgents = agents.map(mapFoundryAgent);
+          agentCount = agents.length;
+          modelCount = deployments.length;
+        })
+        .catch(() => {})
+        .finally(() => { loading = false; });
+    } else {
+      agentCount = null;
+      modelCount = null;
+      liveAgents = [];
+    }
+  });
+
+  let displayAgents = $derived(
+    $authStatus.signed_in && liveAgents.length > 0 ? liveAgents : mockAgents
+  );
+
+  let greeting = $derived(
+    $authStatus.signed_in && $authStatus.user_name
+      ? `Good evening, ${$authStatus.user_name} 👋`
+      : 'Good evening 👋'
+  );
 </script>
 
 <div class="page-header">
-  <div class="page-title">Good evening, MJ 👋</div>
+  <div class="page-title">{greeting}</div>
   <div class="page-subtitle">Your unified view across Foundry, Copilot Studio, M365, and local agents</div>
 </div>
 
+{#if !$authStatus.signed_in}
+  <div class="not-connected-banner">
+    <span>🔌</span>
+    <span style="font-size:.85rem;color:var(--text-2)">Sign in to see your live resources. Showing sample data.</span>
+  </div>
+{/if}
+
 <div class="stats-row">
   <div class="stat">
-    <div class="stat-val">7</div>
-    <div class="stat-label">Total Agents</div>
-    <div class="stat-sub" style="color:var(--text-3)">3 Foundry · 2 Studio · 1 M365 · 1 Local</div>
+    <div class="stat-val">{agentCount !== null ? agentCount : 7}</div>
+    <div class="stat-label">{$authStatus.signed_in ? 'Foundry Agents' : 'Total Agents'}</div>
+    <div class="stat-sub" style="color:var(--text-3)">{$authStatus.signed_in ? 'From Azure AI Foundry' : '3 Foundry · 2 Studio · 1 M365 · 1 Local'}</div>
   </div>
   <div class="stat">
-    <div class="stat-val" style="color:var(--success)">5 / 10</div>
-    <div class="stat-label">Models Online</div>
-    <div class="stat-sub">3 cloud · 2 local</div>
+    <div class="stat-val" style="color:var(--success)">{modelCount !== null ? modelCount : '5 / 10'}</div>
+    <div class="stat-label">{$authStatus.signed_in ? 'Deployments' : 'Models Online'}</div>
+    <div class="stat-sub">{$authStatus.signed_in ? 'Cloud model deployments' : '3 cloud · 2 local'}</div>
   </div>
   <div class="stat">
-    <div class="stat-val">2</div>
+    <div class="stat-val">—</div>
     <div class="stat-label">Active Runs</div>
-    <div class="stat-sub up">↑ support-agent, batch-classify</div>
+    <div class="stat-sub">{$authStatus.signed_in ? 'See Runs page' : 'support-agent, batch-classify'}</div>
   </div>
   <div class="stat">
-    <div class="stat-val">$342</div>
+    <div class="stat-val">—</div>
     <div class="stat-label">Month Spend</div>
-    <div class="stat-sub down">↑ 12% vs Feb</div>
+    <div class="stat-sub">Coming soon</div>
   </div>
 </div>
 
@@ -50,32 +111,39 @@
     <div class="section-title">Your Agents</div>
     <button class="section-link" onclick={() => navigateTo('agents')}>View all →</button>
   </div>
-  <div class="agent-grid">
-    {#each agents.slice(0, 4) as agent}
-      <button class="agent-card src-{agent.source}" onclick={() => navigateTo('chat')}>
-        <div class="agent-header">
-          <div class="agent-icon {agent.source}">
-            {agent.source === 'foundry' ? '🤖' : agent.source === 'studio' ? '✨' : agent.source === 'm365' ? '👤' : '🏠'}
+  {#if loading}
+    <div class="loading-state" style="padding:1.5rem">
+      <div class="spinner"></div>
+      <p>Loading…</p>
+    </div>
+  {:else}
+    <div class="agent-grid">
+      {#each displayAgents.slice(0, 4) as agent}
+        <button class="agent-card src-{agent.source}" onclick={() => navigateTo('chat')}>
+          <div class="agent-header">
+            <div class="agent-icon {agent.source}">
+              {agent.source === 'foundry' ? '🤖' : agent.source === 'studio' ? '✨' : agent.source === 'm365' ? '👤' : '🏠'}
+            </div>
+            <div>
+              <div class="agent-name">{agent.name}</div>
+              <div class="agent-desc">{agent.description}</div>
+            </div>
           </div>
-          <div>
-            <div class="agent-name">{agent.name}</div>
-            <div class="agent-desc">{agent.description}</div>
+          <div class="agent-meta">
+            <span class="badge badge-{agent.source === 'foundry' ? 'blue' : agent.source === 'studio' ? 'pink' : agent.source === 'm365' ? 'purple' : 'yellow'}">
+              {agent.source === 'foundry' ? 'Foundry' : agent.source === 'studio' ? 'Studio' : agent.source === 'm365' ? 'M365' : 'Local'}
+            </span>
+            {#if agent.model}
+              <span class="badge badge-muted">{agent.model}</span>
+            {/if}
+            {#if agent.threads}
+              <span class="badge badge-green">● {agent.threads} threads</span>
+            {/if}
           </div>
-        </div>
-        <div class="agent-meta">
-          <span class="badge badge-{agent.source === 'foundry' ? 'blue' : agent.source === 'studio' ? 'pink' : agent.source === 'm365' ? 'purple' : 'yellow'}">
-            {agent.source === 'foundry' ? 'Foundry' : agent.source === 'studio' ? 'Studio' : agent.source === 'm365' ? 'M365' : 'Local'}
-          </span>
-          {#if agent.model}
-            <span class="badge badge-muted">{agent.model}</span>
-          {/if}
-          {#if agent.threads}
-            <span class="badge badge-green">● {agent.threads} threads</span>
-          {/if}
-        </div>
-      </button>
-    {/each}
-  </div>
+        </button>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <!-- Activity Feed -->

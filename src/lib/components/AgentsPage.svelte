@@ -1,11 +1,60 @@
 <script lang="ts">
-  import { agents } from '../stores/data';
+  import { agents as mockAgents } from '../stores/data';
   import { navigateTo } from '../stores/navigation';
+  import { activeEndpoint, authStatus } from '../stores/auth';
+  import * as api from '../services/api';
+  import type { FoundryAgent } from '../services/api';
+  import type { Agent } from '../types';
 
   let filter = $state('all');
+  let liveAgents = $state<Agent[]>([]);
+  let loading = $state(false);
+  let error = $state<string | null>(null);
+
+  const placeholderAgents = mockAgents.filter(a => a.source !== 'foundry');
+
+  function mapFoundryAgent(fa: FoundryAgent): Agent {
+    return {
+      id: fa.id,
+      name: fa.name,
+      description: fa.instructions || `Model: ${fa.model}`,
+      source: 'foundry',
+      model: fa.model,
+      status: 'active',
+      tools: fa.tools.map(t => t.type),
+    };
+  }
+
+  function loadAgents(endpoint: string) {
+    loading = true;
+    error = null;
+    api.listAgents(endpoint)
+      .then(data => { liveAgents = data.map(mapFoundryAgent); })
+      .catch(e => { error = e.toString(); })
+      .finally(() => { loading = false; });
+  }
+
+  $effect(() => {
+    const endpoint = $activeEndpoint;
+    const status = $authStatus;
+    if (status.signed_in && endpoint) {
+      loadAgents(endpoint);
+    } else {
+      liveAgents = [];
+    }
+  });
+
+  function retry() {
+    const endpoint = $activeEndpoint;
+    if (endpoint) loadAgents(endpoint);
+  }
+
+  let allAgents = $derived(
+    $authStatus.signed_in ? [...liveAgents, ...placeholderAgents] : mockAgents
+  );
 
   let filtered = $derived(
-    filter === 'all' ? agents : agents.filter(a => a.source === filter)
+    filter === 'all' ? allAgents : allAgents.filter(a => a.source === filter)
   );
 
   const sourceLabel: Record<string, string> = { foundry: 'Foundry', studio: 'Studio', m365: 'M365', local: 'Local' };
@@ -24,41 +73,65 @@
   </div>
 </div>
 
+{#if !$authStatus.signed_in}
+  <div class="not-connected-banner">
+    <span>🔌</span>
+    <span style="font-size:.85rem;color:var(--text-2)">Sign in to see your Foundry agents. Showing sample data.</span>
+  </div>
+{/if}
+
 <div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">
-  <button class="filter-chip" class:active={filter === 'all'} onclick={() => filter = 'all'}>All ({agents.length})</button>
+  <button class="filter-chip" class:active={filter === 'all'} onclick={() => filter = 'all'}>All ({allAgents.length})</button>
   {#each ['foundry', 'studio', 'm365', 'local'] as src}
     <button class="filter-chip" class:active={filter === src} onclick={() => filter = src}>
-      {sourceIcon[src]} {sourceLabel[src]} ({agents.filter(a => a.source === src).length})
+      {sourceIcon[src]} {sourceLabel[src]} ({allAgents.filter(a => a.source === src).length})
     </button>
   {/each}
 </div>
 
-<div class="agent-grid">
-  {#each filtered as agent (agent.id)}
-    <div class="agent-card src-{agent.source}">
-      <div class="agent-header">
-        <div class="agent-icon {agent.source}">{sourceIcon[agent.source]}</div>
-        <div style="flex:1;min-width:0">
-          <div class="agent-name">{agent.name}</div>
-          <div class="agent-desc">{agent.description}</div>
+{#if loading}
+  <div class="loading-state">
+    <div class="spinner"></div>
+    <p>Loading agents…</p>
+  </div>
+{:else if error}
+  <div class="error-state">
+    <p>⚠️ {error}</p>
+    <button class="btn btn-outline" onclick={retry}>Retry</button>
+  </div>
+{:else}
+  <div class="agent-grid">
+    {#each filtered as agent (agent.id)}
+      <div class="agent-card src-{agent.source}">
+        <div class="agent-header">
+          <div class="agent-icon {agent.source}">{sourceIcon[agent.source]}</div>
+          <div style="flex:1;min-width:0">
+            <div class="agent-name">{agent.name}</div>
+            <div class="agent-desc">{agent.description}</div>
+          </div>
+        </div>
+        <div class="agent-meta">
+          <span class="badge {sourceBadge[agent.source]}">{sourceLabel[agent.source]}</span>
+          {#if agent.model}<span class="badge badge-muted">{agent.model}{#if agent.runtime} · {agent.runtime}{/if}</span>{/if}
+          <span class="badge {statusBadge[agent.status] || 'badge-muted'}">
+            {#if ['active', 'published', 'running'].includes(agent.status)}●{/if}
+            {agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}
+          </span>
+        </div>
+        <div class="agent-actions">
+          <button class="btn btn-ghost" onclick={() => navigateTo('chat')}>💬 Chat</button>
+          {#if agent.threads}<button class="btn btn-ghost">📋 Threads</button>{/if}
+          <button class="btn btn-ghost">⚙️ {agent.source === 'local' ? 'Config' : 'Edit'}</button>
         </div>
       </div>
-      <div class="agent-meta">
-        <span class="badge {sourceBadge[agent.source]}">{sourceLabel[agent.source]}</span>
-        {#if agent.model}<span class="badge badge-muted">{agent.model}{#if agent.runtime} · {agent.runtime}{/if}</span>{/if}
-        <span class="badge {statusBadge[agent.status] || 'badge-muted'}">
-          {#if ['active', 'published', 'running'].includes(agent.status)}●{/if}
-          {agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}
-        </span>
+    {/each}
+    {#if filtered.length === 0}
+      <div class="empty-state">
+        <p>No agents found for this filter.</p>
       </div>
-      <div class="agent-actions">
-        <button class="btn btn-ghost" onclick={() => navigateTo('chat')}>💬 Chat</button>
-        {#if agent.threads}<button class="btn btn-ghost">📋 Threads</button>{/if}
-        <button class="btn btn-ghost">⚙️ {agent.source === 'local' ? 'Config' : 'Edit'}</button>
-      </div>
-    </div>
-  {/each}
-</div>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .agent-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
