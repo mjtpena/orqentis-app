@@ -1,11 +1,11 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from "@tauri-apps/api/core";
 
 // Types matching Rust return types
 export interface AuthStatus {
   signed_in: boolean;
   user_name: string | null;
   tenant_id: string | null;
-  auth_mode: 'oauth' | 'az_cli' | 'none';
+  auth_mode: "oauth" | "az_cli" | "none";
 }
 
 export interface AuthConfig {
@@ -144,85 +144,115 @@ export interface AgentRunResult {
 
 // ---- Auth ----
 export async function signIn(): Promise<AuthStatus> {
-  return invoke('sign_in');
+  return invoke("sign_in");
 }
 
 export async function signOut(): Promise<void> {
-  return invoke('sign_out');
+  return invoke("sign_out");
 }
 
 export async function getAuthStatus(): Promise<AuthStatus> {
-  return invoke('get_auth_status');
+  return invoke("get_auth_status");
 }
 
 export async function getAuthConfig(): Promise<AuthConfig> {
-  return invoke('get_auth_config');
+  return invoke("get_auth_config");
 }
 
 // ---- Discovery ----
 export async function discoverResources(): Promise<DiscoveryResult> {
-  return invoke('discover_resources');
+  return invoke("discover_resources");
 }
 
 export async function listSubscriptions(): Promise<Subscription[]> {
-  return invoke('list_subscriptions');
+  return invoke("list_subscriptions");
 }
 
-export async function listArmDeployments(aiServicesResourceId: string): Promise<ArmDeployment[]> {
-  return invoke('list_deployments', { aiServicesResourceId });
+export async function listArmDeployments(
+  aiServicesResourceId: string,
+): Promise<ArmDeployment[]> {
+  return invoke("list_deployments", { aiServicesResourceId });
 }
 
 // ---- Foundry ----
-export async function listFoundryDeployments(endpoint: string): Promise<FoundryDeployment[]> {
-  return invoke('list_foundry_deployments', { endpoint });
+export async function listFoundryDeployments(
+  endpoint: string,
+): Promise<FoundryDeployment[]> {
+  return invoke("list_foundry_deployments", { endpoint });
 }
 
 export async function listAgents(endpoint: string): Promise<FoundryAgent[]> {
-  return invoke('list_agents', { endpoint });
+  return invoke("list_agents", { endpoint });
 }
 
-export async function createAgent(endpoint: string, name: string, model: string, instructions: string): Promise<FoundryAgent> {
-  return invoke('create_agent', { endpoint, name, model, instructions });
+export async function createAgent(
+  endpoint: string,
+  name: string,
+  model: string,
+  instructions: string,
+): Promise<FoundryAgent> {
+  return invoke("create_agent", { endpoint, name, model, instructions });
 }
 
-export async function deleteAgent(endpoint: string, agentId: string): Promise<void> {
-  return invoke('delete_agent', { endpoint, agentId });
+export async function deleteAgent(
+  endpoint: string,
+  agentId: string,
+): Promise<void> {
+  return invoke("delete_agent", { endpoint, agentId });
 }
 
 export async function listFiles(endpoint: string): Promise<FoundryFile[]> {
-  return invoke('list_files', { endpoint });
+  return invoke("list_files", { endpoint });
 }
 
-export async function deleteFile(endpoint: string, fileId: string): Promise<void> {
-  return invoke('delete_file', { endpoint, fileId });
+export async function deleteFile(
+  endpoint: string,
+  fileId: string,
+): Promise<void> {
+  return invoke("delete_file", { endpoint, fileId });
 }
 
-export async function listVectorStores(endpoint: string): Promise<VectorStore[]> {
-  return invoke('list_vector_stores', { endpoint });
+export async function listVectorStores(
+  endpoint: string,
+): Promise<VectorStore[]> {
+  return invoke("list_vector_stores", { endpoint });
 }
 
-export async function listFineTuningJobs(endpoint: string): Promise<FineTuningJob[]> {
-  return invoke('list_fine_tuning_jobs', { endpoint });
+export async function listFineTuningJobs(
+  endpoint: string,
+): Promise<FineTuningJob[]> {
+  return invoke("list_fine_tuning_jobs", { endpoint });
 }
 
 export async function listBatchJobs(endpoint: string): Promise<BatchJob[]> {
-  return invoke('list_batch_jobs', { endpoint });
+  return invoke("list_batch_jobs", { endpoint });
 }
 
-export async function listConnections(endpoint: string): Promise<FoundryConnection[]> {
-  return invoke('list_connections', { endpoint });
+export async function listConnections(
+  endpoint: string,
+): Promise<FoundryConnection[]> {
+  return invoke("list_connections", { endpoint });
 }
 
 export async function listModels(endpoint: string): Promise<FoundryModel[]> {
-  return invoke('list_models', { endpoint });
+  return invoke("list_models", { endpoint });
 }
 
 // ---- Chat ----
 // Note: send_chat_message streams via events, not return value
-export async function sendChatMessage(endpoint: string, deploymentName: string, messages: ChatMessagePayload[]): Promise<void> {
-  return invoke('send_chat_message', { endpoint, deploymentName, messages });
+export async function sendChatMessage(
+  endpoint: string,
+  deploymentName: string,
+  messages: ChatMessagePayload[],
+): Promise<void> {
+  return invoke("send_chat_message", { endpoint, deploymentName, messages });
 }
 
-export async function sendAgentMessage(endpoint: string, agentId: string, threadId: string | null, message: string): Promise<AgentRunResult> {
-  return invoke('send_agent_message', { endpoint, agentId, threadId, message });
+export async function sendAgentMessage(
+  endpoint: string,
+  agentId: string,
+  threadId: string | null,
+  message: string,
+): Promise<AgentRunResult> {
+  return invoke("send_agent_message", { endpoint, agentId, threadId, message });
 }
