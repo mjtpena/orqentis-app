@@ -1,13 +1,12 @@
 <script lang="ts">
   import { navigateTo } from '../stores/navigation';
-  import { activeEndpoint, authStatus, hubs, armDeployments } from '../stores/auth';
+  import { activeEndpoint, authStatus, hubs, armDeployments, activeHub, studioAgents, m365Agents, localAgents } from '../stores/auth';
   import { activityFeed } from '../stores/data';
   import * as api from '../services/api';
   import type { Agent } from '../types';
-  import type { FoundryAgent } from '../services/api';
+  import type { FoundryAgent, StudioBot, M365Agent, LocalAgent } from '../services/api';
 
-  let agentCount = $state(0);
-  let liveAgents = $state<Agent[]>([]);
+  let foundryAgents = $state<Agent[]>([]);
   let loading = $state(false);
 
   function mapFoundryAgent(fa: FoundryAgent): Agent {
@@ -22,25 +21,41 @@
     };
   }
 
+  function mapStudioBot(b: StudioBot): Agent {
+    return { id: b.id, name: b.name, description: b.description ?? 'Copilot Studio bot', source: 'studio', status: b.status === 'published' ? 'published' : 'draft' };
+  }
+
+  function mapM365Agent(a: M365Agent): Agent {
+    return { id: a.id, name: a.name, description: a.description ?? 'M365 Copilot agent', source: 'm365', status: 'active' };
+  }
+
+  function mapLocalAgent(a: LocalAgent): Agent {
+    return { id: a.id, name: a.name, description: a.description ?? a.runtime, source: 'local', model: a.model ?? undefined, runtime: a.runtime, status: 'running' };
+  }
+
   $effect(() => {
     const endpoint = $activeEndpoint;
     const status = $authStatus;
     if (status.signed_in && endpoint) {
       loading = true;
       api.listAgents(endpoint)
-        .then((agents) => {
-          liveAgents = agents.map(mapFoundryAgent);
-          agentCount = agents.length;
-        })
+        .then((agents) => { foundryAgents = agents.map(mapFoundryAgent); })
         .catch((e) => { console.error('[HomePage] Failed to load agents:', e); })
         .finally(() => { loading = false; });
     } else {
-      agentCount = 0;
-      liveAgents = [];
+      foundryAgents = [];
     }
   });
 
+  let allAgents = $derived([
+    ...foundryAgents,
+    ...$studioAgents.map(mapStudioBot),
+    ...$m365Agents.map(mapM365Agent),
+    ...$localAgents.map(mapLocalAgent),
+  ]);
+
   let modelCount = $derived($armDeployments.length);
+  let projectCount = $derived($activeHub?.projects?.length ?? 0);
 
   let greeting = $derived(
     $authStatus.signed_in && $authStatus.user_name
@@ -63,9 +78,9 @@
 
 <div class="stats-row">
   <div class="stat">
-    <div class="stat-val">{$authStatus.signed_in ? agentCount : '—'}</div>
-    <div class="stat-label">Foundry Agents</div>
-    <div class="stat-sub" style="color:var(--text-3)">{$authStatus.signed_in ? 'From Azure AI Foundry' : 'Sign in to view'}</div>
+    <div class="stat-val">{$authStatus.signed_in ? allAgents.length : '—'}</div>
+    <div class="stat-label">Total Agents</div>
+    <div class="stat-sub" style="color:var(--text-3)">{$authStatus.signed_in ? `${foundryAgents.length} Foundry · ${$studioAgents.length} Studio · ${$m365Agents.length} M365 · ${$localAgents.length} Local` : 'Sign in to view'}</div>
   </div>
   <div class="stat">
     <div class="stat-val" style="color:var(--success)">{$authStatus.signed_in ? modelCount : '—'}</div>
@@ -75,12 +90,12 @@
   <div class="stat">
     <div class="stat-val">{$authStatus.signed_in ? $hubs.length : '—'}</div>
     <div class="stat-label">Hubs</div>
-    <div class="stat-sub">{$authStatus.signed_in ? 'Azure AI Foundry hubs' : 'Sign in to view'}</div>
+    <div class="stat-sub">{$authStatus.signed_in ? `${projectCount} project${projectCount !== 1 ? 's' : ''}` : 'Sign in to view'}</div>
   </div>
   <div class="stat">
-    <div class="stat-val">—</div>
-    <div class="stat-label">Month Spend</div>
-    <div class="stat-sub">Coming soon</div>
+    <div class="stat-val">{$authStatus.signed_in ? $localAgents.length : '—'}</div>
+    <div class="stat-label">Local Runtimes</div>
+    <div class="stat-sub">{$authStatus.signed_in ? ($localAgents.length > 0 ? 'Ollama / LM Studio / etc.' : 'None detected') : 'Sign in to view'}</div>
   </div>
 </div>
 
@@ -108,13 +123,13 @@
       <div class="spinner"></div>
       <p>Loading…</p>
     </div>
-  {:else if liveAgents.length === 0}
+  {:else if allAgents.length === 0}
     <div class="empty-state" style="padding:1.5rem">
-      <p style="color:var(--text-3);font-size:.88rem">{$authStatus.signed_in ? 'No agents found in this project.' : 'Sign in to see your agents.'}</p>
+      <p style="color:var(--text-3);font-size:.88rem">{$authStatus.signed_in ? 'No agents found across any source.' : 'Sign in to see your agents.'}</p>
     </div>
   {:else}
     <div class="agent-grid">
-      {#each liveAgents.slice(0, 4) as agent}
+      {#each allAgents.slice(0, 6) as agent}
         <button class="agent-card src-{agent.source}" onclick={() => navigateTo('chat')}>
           <div class="agent-header">
             <div class="agent-icon {agent.source}">

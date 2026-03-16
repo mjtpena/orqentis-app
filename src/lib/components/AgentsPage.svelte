@@ -1,12 +1,12 @@
 <script lang="ts">
   import { navigateTo } from '../stores/navigation';
-  import { activeEndpoint, authStatus } from '../stores/auth';
+  import { activeEndpoint, authStatus, studioAgents, m365Agents, localAgents } from '../stores/auth';
   import * as api from '../services/api';
-  import type { FoundryAgent } from '../services/api';
+  import type { FoundryAgent, StudioBot, M365Agent, LocalAgent as LocalAgentType } from '../services/api';
   import type { Agent } from '../types';
 
   let filter = $state('all');
-  let liveAgents = $state<Agent[]>([]);
+  let foundryAgents = $state<Agent[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
 
@@ -22,11 +22,23 @@
     };
   }
 
+  function mapStudioBot(b: StudioBot): Agent {
+    return { id: b.id, name: b.name, description: b.description ?? 'Copilot Studio bot', source: 'studio', status: b.status === 'published' ? 'published' : 'draft' };
+  }
+
+  function mapM365Agent(a: M365Agent): Agent {
+    return { id: a.id, name: a.name, description: a.description ?? 'M365 Copilot agent', source: 'm365', status: 'active' };
+  }
+
+  function mapLocalAgent(a: LocalAgentType): Agent {
+    return { id: a.id, name: a.name, description: a.description ?? a.runtime, source: 'local', model: a.model ?? undefined, runtime: a.runtime, status: 'running' };
+  }
+
   function loadAgents(endpoint: string) {
     loading = true;
     error = null;
     api.listAgents(endpoint)
-      .then(data => { liveAgents = data.map(mapFoundryAgent); })
+      .then(data => { foundryAgents = data.map(mapFoundryAgent); })
       .catch(e => { error = e.toString(); })
       .finally(() => { loading = false; });
   }
@@ -37,7 +49,7 @@
     if (status.signed_in && endpoint) {
       loadAgents(endpoint);
     } else {
-      liveAgents = [];
+      foundryAgents = [];
     }
   });
 
@@ -46,9 +58,25 @@
     if (endpoint) loadAgents(endpoint);
   }
 
+  let allAgents = $derived([
+    ...foundryAgents,
+    ...$studioAgents.map(mapStudioBot),
+    ...$m365Agents.map(mapM365Agent),
+    ...$localAgents.map(mapLocalAgent),
+  ]);
+
   let filtered = $derived(
-    filter === 'all' ? liveAgents : liveAgents.filter(a => a.source === filter)
+    filter === 'all' ? allAgents : allAgents.filter(a => a.source === filter)
   );
+
+  let sources = $derived(() => {
+    const srcs: string[] = [];
+    if (foundryAgents.length > 0) srcs.push('foundry');
+    if ($studioAgents.length > 0) srcs.push('studio');
+    if ($m365Agents.length > 0) srcs.push('m365');
+    if ($localAgents.length > 0) srcs.push('local');
+    return srcs;
+  });
 
   const sourceLabel: Record<string, string> = { foundry: 'Foundry', studio: 'Studio', m365: 'M365', local: 'Local' };
   const sourceIcon: Record<string, string> = { foundry: '🤖', studio: '✨', m365: '👤', local: '🏠' };
@@ -74,11 +102,14 @@
 {/if}
 
 <div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">
-  <button class="filter-chip" class:active={filter === 'all'} onclick={() => filter = 'all'}>All ({liveAgents.length})</button>
-  {#each ['foundry'] as src}
-    <button class="filter-chip" class:active={filter === src} onclick={() => filter = src}>
-      {sourceIcon[src]} {sourceLabel[src]} ({liveAgents.filter(a => a.source === src).length})
-    </button>
+  <button class="filter-chip" class:active={filter === 'all'} onclick={() => filter = 'all'}>All ({allAgents.length})</button>
+  {#each ['foundry', 'studio', 'm365', 'local'] as src}
+    {@const count = allAgents.filter(a => a.source === src).length}
+    {#if count > 0}
+      <button class="filter-chip" class:active={filter === src} onclick={() => filter = src}>
+        {sourceIcon[src]} {sourceLabel[src]} ({count})
+      </button>
+    {/if}
   {/each}
 </div>
 

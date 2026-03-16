@@ -5,8 +5,13 @@ use tauri::Emitter;
 use crate::arm;
 use crate::auth;
 use crate::foundry;
+use crate::local;
+use crate::m365;
+use crate::studio;
 
 const ARM_SCOPE: &str = "https://management.azure.com/.default offline_access";
+const GRAPH_SCOPE: &str = "https://graph.microsoft.com/.default offline_access";
+const BAP_SCOPE: &str = "https://service.powerapps.com/.default offline_access";
 
 // ---------------------------------------------------------------------------
 // Helper types exposed to the frontend
@@ -497,4 +502,46 @@ pub async fn send_agent_message(
         status: current_run.status,
         messages: chat_messages,
     })
+}
+
+// ===========================================================================
+// Copilot Studio agents
+// ===========================================================================
+
+async fn get_graph_token() -> Result<String, String> {
+    auth::get_scoped_token(GRAPH_SCOPE)
+        .await
+        .map_err(|e| format!("Graph token error: {e}"))
+}
+
+async fn get_bap_token() -> Result<String, String> {
+    auth::get_scoped_token(BAP_SCOPE)
+        .await
+        .map_err(|e| format!("BAP token error: {e}"))
+}
+
+#[tauri::command]
+pub async fn list_studio_agents() -> Result<Vec<studio::StudioBot>, String> {
+    let graph_token = get_graph_token().await?;
+    let bap_token = get_bap_token().await.unwrap_or_default();
+    studio::discover_studio_bots(&bap_token, &graph_token).await
+}
+
+// ===========================================================================
+// M365 Copilot agents
+// ===========================================================================
+
+#[tauri::command]
+pub async fn list_m365_agents() -> Result<Vec<m365::M365Agent>, String> {
+    let graph_token = get_graph_token().await?;
+    m365::list_m365_agents(&graph_token).await
+}
+
+// ===========================================================================
+// Local agents (Ollama, LM Studio, vLLM, etc.)
+// ===========================================================================
+
+#[tauri::command]
+pub async fn list_local_agents() -> Result<Vec<local::LocalAgent>, String> {
+    Ok(local::discover_local_agents().await)
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { currentPage, navigateTo, toggleTheme, theme } from '../stores/navigation';
-  import { authStatus, authLoading, discoveryLoading, hubs } from '../stores/auth';
+  import { authStatus, authLoading, discoveryLoading, hubs, studioAgents, m365Agents, localAgents } from '../stores/auth';
   import type { Page } from '../types';
 
   const navGroups: { label?: string; items: { id: Page; icon: string; name: string }[] }[] = [
@@ -87,7 +87,7 @@
       <span class="conn-label">Connecting…</span>
     {:else if $authStatus.signed_in}
       <span class="conn-dot conn-dot--connected"></span>
-      <span class="conn-label">{$hubs.length} hub{$hubs.length !== 1 ? 's' : ''}</span>
+      <span class="conn-label">{$hubs.length} hub{$hubs.length !== 1 ? 's' : ''}{$studioAgents.length > 0 ? ` · ${$studioAgents.length} Studio` : ''}{$m365Agents.length > 0 ? ` · ${$m365Agents.length} M365` : ''}{$localAgents.length > 0 ? ` · ${$localAgents.length} Local` : ''}</span>
       <span class="conn-badge">{$authStatus.auth_mode === 'az_cli' ? 'CLI' : $authStatus.auth_mode === 'oauth' ? 'OAuth' : $authStatus.auth_mode}</span>
     {:else}
       <span class="conn-dot conn-dot--disconnected"></span>

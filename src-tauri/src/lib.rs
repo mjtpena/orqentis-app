@@ -2,6 +2,9 @@ pub mod arm;
 pub mod auth;
 pub mod commands;
 pub mod foundry;
+pub mod local;
+pub mod m365;
+pub mod studio;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -41,6 +44,10 @@ pub fn run() {
       // Chat
       commands::send_chat_message,
       commands::send_agent_message,
+      // Multi-source agents
+      commands::list_studio_agents,
+      commands::list_m365_agents,
+      commands::list_local_agents,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

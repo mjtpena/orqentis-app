@@ -132,6 +132,37 @@ export interface FoundryConnection {
   };
 }
 
+// Copilot Studio types
+export interface StudioBot {
+  id: string;
+  name: string;
+  description?: string | null;
+  status?: string | null;
+  environment_id?: string | null;
+  created_on?: string | null;
+  modified_on?: string | null;
+}
+
+// M365 Copilot agent types
+export interface M365Agent {
+  id: string;
+  name: string;
+  description?: string | null;
+  app_id?: string | null;
+  status: string;
+}
+
+// Local agent types
+export interface LocalAgent {
+  id: string;
+  name: string;
+  description?: string | null;
+  runtime: string;
+  status: string;
+  model?: string | null;
+  endpoint: string;
+}
+
 export interface ChatMessagePayload {
   role: string;
   content: string;
@@ -257,4 +288,17 @@ export async function sendAgentMessage(
   message: string,
 ): Promise<AgentRunResult> {
   return invoke("send_agent_message", { endpoint, agentId, threadId, message });
+}
+
+// ---- Multi-source agents ----
+export async function listStudioAgents(): Promise<StudioBot[]> {
+  return invoke("list_studio_agents");
+}
+
+export async function listM365Agents(): Promise<M365Agent[]> {
+  return invoke("list_m365_agents");
+}
+
+export async function listLocalAgents(): Promise<LocalAgent[]> {
+  return invoke("list_local_agents");
 }
