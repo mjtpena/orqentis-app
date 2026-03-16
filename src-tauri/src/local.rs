@@ -1,5 +1,8 @@
+use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::pin::Pin;
+use futures_util::Stream;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -192,4 +195,114 @@ pub async fn discover_local_agents() -> Vec<LocalAgent> {
     all.extend(localai);
     all.extend(vllm);
     all
+}
+
+// ---------------------------------------------------------------------------
+// Local Chat (OpenAI-compatible streaming)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalChatRequest {
+    model: String,
+    messages: Vec<LocalChatMessage>,
+    stream: bool,
+    max_tokens: u32,
+    temperature: f32,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalChatChunk {
+    choices: Vec<LocalChatChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalChatChoice {
+    delta: LocalChatDelta,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalChatDelta {
+    content: Option<String>,
+}
+
+/// Stream chat completions from a local OpenAI-compatible endpoint (Ollama, LM Studio, etc.)
+pub async fn stream_local_chat(
+    endpoint: &str,
+    model: &str,
+    messages: Vec<LocalChatMessage>,
+) -> Result<Pin<Box<dyn Stream<Item = Result<String, String>> + Send>>, String> {
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    // Ollama uses /api/chat for its native API, but also supports /v1/chat/completions
+    let url = format!("{}/v1/chat/completions", endpoint.trim_end_matches('/'));
+
+    let req = LocalChatRequest {
+        model: model.to_string(),
+        messages,
+        stream: true,
+        max_tokens: 4096,
+        temperature: 0.7,
+    };
+
+    let resp = client
+        .post(&url)
+        .json(&req)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to local model: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Local model returned {status}: {body}"));
+    }
+
+    let stream = resp.bytes_stream();
+
+    let mapped = stream
+        .map(|chunk_result| -> Vec<Result<String, String>> {
+            let chunk = match chunk_result {
+                Ok(b) => b,
+                Err(e) => return vec![Err(e.to_string())],
+            };
+
+            let text = match std::str::from_utf8(&chunk) {
+                Ok(s) => s.to_string(),
+                Err(e) => return vec![Err(format!("UTF-8 decode error: {e}"))],
+            };
+
+            let mut results = Vec::new();
+            for line in text.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with(':') {
+                    continue;
+                }
+                if let Some(data) = line.strip_prefix("data: ") {
+                    let data = data.trim();
+                    if data == "[DONE]" {
+                        break;
+                    }
+                    if let Ok(chunk) = serde_json::from_str::<LocalChatChunk>(data) {
+                        if let Some(choice) = chunk.choices.first() {
+                            if let Some(content) = &choice.delta.content {
+                                results.push(Ok(content.clone()));
+                            }
+                        }
+                    }
+                }
+            }
+            results
+        })
+        .flat_map(futures_util::stream::iter);
+
+    Ok(Box::pin(mapped))
 }

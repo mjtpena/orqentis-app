@@ -304,6 +304,15 @@ export async function listLocalAgents(): Promise<LocalAgent[]> {
   return invoke("list_local_agents");
 }
 
+// Note: send_local_chat_message streams via events like send_chat_message
+export async function sendLocalChatMessage(
+  endpoint: string,
+  modelName: string,
+  messages: ChatMessagePayload[],
+): Promise<void> {
+  return invoke("send_local_chat_message", { endpoint, modelName, messages });
+}
+
 // ---- Usage Metrics ----
 export interface UsageMetrics {
   totalCalls: number;

@@ -9,6 +9,9 @@ pub mod studio;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_sql::Builder::new().build())
+    .plugin(tauri_plugin_notification::init())
+    .plugin(tauri_plugin_window_state::Builder::new().build())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -48,6 +51,8 @@ pub fn run() {
       commands::list_studio_agents,
       commands::list_m365_agents,
       commands::list_local_agents,
+      // Local chat
+      commands::send_local_chat_message,
       // Usage metrics
       commands::get_usage_metrics,
     ])

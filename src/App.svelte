@@ -12,8 +12,11 @@
   import ConnectionsPage from './lib/components/ConnectionsPage.svelte';
   import CostsPage from './lib/components/CostsPage.svelte';
   import TrustPage from './lib/components/TrustPage.svelte';
+  import CommandPalette from './lib/components/CommandPalette.svelte';
   import { currentPage, navigateTo, theme, toggleTheme } from './lib/stores/navigation';
   import { authStatus, authLoading, authError, signIn, signOut, checkAuth, discoveryLoading, discoveryError } from './lib/stores/auth';
+  import { loadChatSessions } from './lib/stores/data';
+  import { initNotifications } from './lib/services/notifications';
 
   const pageTitles: Record<string, string> = {
     home: 'Home', agents: 'Agents', models: 'Models', chat: 'Chat',
@@ -22,15 +25,30 @@
   };
 
   let showUserMenu = $state(false);
+  let commandPaletteOpen = $state(false);
 
   onMount(() => {
     checkAuth();
+    loadChatSessions();
+    initNotifications();
+
+    // Global keyboard shortcut for command palette
+    function handleGlobalKeydown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        commandPaletteOpen = !commandPaletteOpen;
+      }
+    }
+    document.addEventListener('keydown', handleGlobalKeydown);
+    return () => document.removeEventListener('keydown', handleGlobalKeydown);
   });
 
   function userInitial(name: string | null): string {
     return name ? name.charAt(0).toUpperCase() : '?';
   }
 </script>
+
+<CommandPalette bind:open={commandPaletteOpen} />
 
 <div class="shell">
   <Sidebar />
@@ -39,10 +57,10 @@
     <div class="topbar">
       <div class="topbar-title">{pageTitles[$currentPage] || $currentPage}</div>
       <div style="display:flex;align-items:center;gap:6px">
-        <div class="search-box" style="width:220px">
+        <button class="search-box" style="width:220px;cursor:pointer" onclick={() => commandPaletteOpen = true}>
           <span style="font-size:.82rem;opacity:.5">🔍</span>
-          <input placeholder="Search everything…">
-        </div>
+          <span style="flex:1;font-size:.82rem;color:var(--text-3);text-align:left">Search… ⌘K</span>
+        </button>
         <button class="btn-icon" title="Notifications">🔔</button>
         <button class="btn-icon theme-toggle" title="Toggle theme" onclick={toggleTheme}>
           {#if $theme === 'dark'}☀️{:else}🌙{/if}

@@ -551,6 +551,55 @@ pub async fn list_local_agents() -> Result<Vec<local::LocalAgent>, String> {
     Ok(local::discover_local_agents().await)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+pub async fn send_local_chat_message(
+    app: tauri::AppHandle,
+    endpoint: String,
+    model_name: String,
+    messages: Vec<ChatMessage>,
+) -> Result<(), String> {
+    let local_messages: Vec<local::LocalChatMessage> = messages
+        .into_iter()
+        .map(|m| local::LocalChatMessage {
+            role: m.role,
+            content: m.content,
+        })
+        .collect();
+
+    let mut stream = local::stream_local_chat(&endpoint, &model_name, local_messages)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(content) => {
+                let _ = app.emit(
+                    "chat-token",
+                    ChatTokenPayload {
+                        content: Some(content),
+                        done: None,
+                    },
+                );
+            }
+            Err(e) => {
+                log::error!("local stream error: {e}");
+                break;
+            }
+        }
+    }
+
+    let _ = app.emit(
+        "chat-token",
+        ChatTokenPayload {
+            content: None,
+            done: Some(true),
+        },
+    );
+
+    Ok(())
+}
+
 // ===========================================================================
 // Usage metrics
 // ===========================================================================
