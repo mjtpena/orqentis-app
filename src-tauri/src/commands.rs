@@ -522,9 +522,8 @@ async fn get_bap_token() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn list_studio_agents() -> Result<Vec<studio::StudioBot>, String> {
-    let graph_token = get_graph_token().await?;
-    let bap_token = get_bap_token().await.unwrap_or_default();
-    studio::discover_studio_bots(&bap_token, &graph_token).await
+    let bap_token = get_bap_token().await?;
+    studio::discover_studio_bots(&bap_token, "").await
 }
 
 // ===========================================================================
@@ -533,7 +532,13 @@ pub async fn list_studio_agents() -> Result<Vec<studio::StudioBot>, String> {
 
 #[tauri::command]
 pub async fn list_m365_agents() -> Result<Vec<m365::M365Agent>, String> {
-    let graph_token = get_graph_token().await?;
+    let graph_token = match get_graph_token().await {
+        Ok(t) => t,
+        Err(e) => {
+            log::warn!("[m365] Graph token unavailable: {e}");
+            return Ok(Vec::new());
+        }
+    };
     m365::list_m365_agents(&graph_token).await
 }
 
@@ -544,4 +549,18 @@ pub async fn list_m365_agents() -> Result<Vec<m365::M365Agent>, String> {
 #[tauri::command]
 pub async fn list_local_agents() -> Result<Vec<local::LocalAgent>, String> {
     Ok(local::discover_local_agents().await)
+}
+
+// ===========================================================================
+// Usage metrics
+// ===========================================================================
+
+#[tauri::command(rename_all = "camelCase")]
+pub async fn get_usage_metrics(
+    ai_services_resource_id: String,
+) -> Result<arm::UsageMetrics, String> {
+    let token = get_arm_token().await?;
+    arm::query_usage_metrics(&token, &ai_services_resource_id)
+        .await
+        .map_err(|e| e.to_string())
 }

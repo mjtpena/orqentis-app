@@ -22,7 +22,8 @@
   }
 
   function mapStudioBot(b: StudioBot): Agent {
-    return { id: b.id, name: b.name, description: b.description ?? 'Copilot Studio bot', source: 'studio', status: b.status === 'published' ? 'published' : 'draft' };
+    const desc = b.description ?? (b.environment_name ? `Copilot Studio · ${b.environment_name}` : 'Copilot Studio bot');
+    return { id: b.id, name: b.name, description: desc, source: 'studio', status: b.status === 'published' ? 'published' : 'draft' };
   }
 
   function mapM365Agent(a: M365Agent): Agent {

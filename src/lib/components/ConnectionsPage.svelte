@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { activeEndpoint, authStatus } from '../stores/auth';
+  import { activeEndpoint, activeHub, authStatus } from '../stores/auth';
   import * as api from '../services/api';
-  import type { FoundryConnection } from '../services/api';
+  import type { FoundryConnection, ArmConnection, HubDetail } from '../services/api';
   import type { Connection } from '../types';
 
   let liveConnections = $state<Connection[]>([]);
@@ -15,6 +15,16 @@
     return 'azure';
   }
 
+  function mapArmConnection(c: ArmConnection): Connection {
+    return {
+      id: c.name,
+      name: c.name,
+      description: `${c.properties.category ?? 'Unknown'}${c.properties.target ? ` · ${c.properties.target}` : ''}`,
+      category: detectCategory(c.properties.category ?? ''),
+      status: 'connected',
+    };
+  }
+
   function mapConnection(c: FoundryConnection): Connection {
     return {
       id: c.id ?? c.name,
@@ -25,28 +35,43 @@
     };
   }
 
-  function loadConnections(endpoint: string) {
+  $effect(() => {
+    const endpoint = $activeEndpoint;
+    const hub = $activeHub;
+    const status = $authStatus;
+    if (!status.signed_in || !endpoint) {
+      liveConnections = [];
+      return;
+    }
+
+    // Use ARM connections from hub discovery (always available, no extra API call)
+    if (hub && hub.connections && hub.connections.length > 0) {
+      liveConnections = hub.connections.map(mapArmConnection);
+      return;
+    }
+
+    // Fallback to data-plane API
+    loading = true;
+    error = null;
+    api.listConnections(endpoint)
+      .then(data => { liveConnections = data.map(mapConnection); })
+      .catch(e => {
+        console.warn('[connections] data-plane API failed:', e);
+        liveConnections = [];
+      })
+      .finally(() => { loading = false; });
+  });
+
+  function retry() {
+    // re-trigger the effect by reading the stores
+    const endpoint = $activeEndpoint;
+    if (!endpoint) return;
     loading = true;
     error = null;
     api.listConnections(endpoint)
       .then(data => { liveConnections = data.map(mapConnection); })
       .catch(e => { error = e.toString(); })
       .finally(() => { loading = false; });
-  }
-
-  $effect(() => {
-    const endpoint = $activeEndpoint;
-    const status = $authStatus;
-    if (status.signed_in && endpoint) {
-      loadConnections(endpoint);
-    } else {
-      liveConnections = [];
-    }
-  });
-
-  function retry() {
-    const endpoint = $activeEndpoint;
-    if (endpoint) loadConnections(endpoint);
   }
 
   let allConnections = $derived(liveConnections);

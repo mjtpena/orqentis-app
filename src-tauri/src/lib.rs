@@ -48,6 +48,8 @@ pub fn run() {
       commands::list_studio_agents,
       commands::list_m365_agents,
       commands::list_local_agents,
+      // Usage metrics
+      commands::get_usage_metrics,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

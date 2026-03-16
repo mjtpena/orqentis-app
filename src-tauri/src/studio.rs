@@ -1,6 +1,8 @@
 use reqwest::header::{HeaderMap, ACCEPT, AUTHORIZATION};
 use serde::{Deserialize, Serialize};
 
+use crate::auth;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -16,6 +18,8 @@ pub struct StudioBot {
     #[serde(default)]
     pub environment_id: Option<String>,
     #[serde(default)]
+    pub environment_name: Option<String>,
+    #[serde(default)]
     pub created_on: Option<String>,
     #[serde(default)]
     pub modified_on: Option<String>,
@@ -29,6 +33,10 @@ pub struct PowerPlatformEnvironment {
     pub display_name: Option<String>,
     #[serde(default)]
     pub location: Option<String>,
+    #[serde(default)]
+    pub dataverse_url: Option<String>,
+    #[serde(default)]
+    pub dataverse_api_url: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +61,14 @@ struct BapEnvironment {
 struct BapEnvProperties {
     display_name: Option<String>,
     azure_region: Option<String>,
+    linked_environment_metadata: Option<LinkedEnvMetadata>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct LinkedEnvMetadata {
+    instance_url: Option<String>,
+    instance_api_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,11 +138,16 @@ pub async fn list_environments(bap_token: &str) -> Result<Vec<PowerPlatformEnvir
     Ok(list
         .value
         .into_iter()
-        .map(|e| PowerPlatformEnvironment {
-            id: e.name.clone(),
-            name: e.name,
-            display_name: e.properties.display_name,
-            location: e.properties.azure_region,
+        .map(|e| {
+            let linked = e.properties.linked_environment_metadata.as_ref();
+            PowerPlatformEnvironment {
+                id: e.name.clone(),
+                name: e.name,
+                display_name: e.properties.display_name,
+                location: e.properties.azure_region,
+                dataverse_url: linked.and_then(|l| l.instance_url.clone()),
+                dataverse_api_url: linked.and_then(|l| l.instance_api_url.clone()),
+            }
         })
         .collect())
 }
@@ -171,6 +192,7 @@ pub async fn list_bots(
                 description: None,
                 status,
                 environment_id: None,
+                environment_name: None,
                 created_on: b.created_on,
                 modified_on: b.modified_on,
             }
@@ -179,98 +201,52 @@ pub async fn list_bots(
 }
 
 /// Discover all Copilot Studio bots across all Power Platform environments.
-/// Uses BAP token for environment listing and dynamically scoped Dataverse tokens for each env.
-/// Falls back gracefully — environments we can't access are skipped.
+/// Uses BAP token for environment listing and Azure CLI for per-env Dataverse tokens.
 pub async fn discover_studio_bots(
     bap_token: &str,
-    graph_token: &str,
+    _graph_token: &str,
 ) -> Result<Vec<StudioBot>, String> {
-    // For now, try listing environments and bots from each.
-    // In many tenants, Copilot Studio bots are in the default environment.
-    // The graph_token can access limited Dataverse in some configurations.
     let envs = list_environments(bap_token).await.unwrap_or_default();
+    log::info!("[studio] found {} Power Platform environments", envs.len());
     let mut all_bots: Vec<StudioBot> = Vec::new();
 
     for env in &envs {
-        // Construct the Dataverse URL from environment name
-        // This is a best-effort — real environments have an org URL we'd need to resolve
-        // For now we skip individual env bot listing as it needs per-env Dataverse token scoping
-        // We'll surface the environments themselves as "Studio" presence indicators
-        let _ = env; // suppress unused warning
-    }
+        let api_url = match &env.dataverse_api_url {
+            Some(u) if !u.is_empty() => u.clone(),
+            _ => {
+                log::info!("[studio] env '{}' has no Dataverse API URL, skipping", env.display_name.as_deref().unwrap_or(&env.name));
+                continue;
+            }
+        };
 
-    // If we have a Graph token, try the Power Virtual Agents connector via Graph
-    // GET https://graph.microsoft.com/beta/teamwork/teamsApps?$filter=distributionMethod eq 'organization'
-    // This catches bots published to Teams (which includes Copilot Studio bots)
-    let graph_bots = list_studio_bots_via_graph(graph_token).await.unwrap_or_default();
-    all_bots.extend(graph_bots);
+        // The Dataverse resource URL (without path) for token scoping
+        let dv_url = env.dataverse_url.as_deref().unwrap_or(&api_url);
+        let dv_resource = dv_url.trim_end_matches('/');
+        let scope = format!("{dv_resource}/.default");
 
-    Ok(all_bots)
-}
+        let dv_token = match auth::get_scoped_token(&scope).await {
+            Ok(t) => t,
+            Err(e) => {
+                log::warn!("[studio] failed to get Dataverse token for env '{}': {e}", env.display_name.as_deref().unwrap_or(&env.name));
+                continue;
+            }
+        };
 
-/// Try to find Copilot Studio / PVA bots via Microsoft Graph (Teams apps with bot capability).
-async fn list_studio_bots_via_graph(graph_token: &str) -> Result<Vec<StudioBot>, String> {
-    let url = "https://graph.microsoft.com/v1.0/appCatalogs/teamsApps?$filter=distributionMethod eq 'organization'&$expand=appDefinitions";
-    let resp = reqwest::Client::new()
-        .get(url)
-        .headers(build_headers(graph_token))
-        .send()
-        .await
-        .map_err(|e| format!("Graph request failed: {e}"))?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!("Graph API {status}: {}", &body[..body.len().min(500)]));
-    }
-
-    let body: serde_json::Value = resp.json().await.map_err(|e| format!("Graph parse: {e}"))?;
-    let mut bots = Vec::new();
-
-    if let Some(apps) = body.get("value").and_then(|v| v.as_array()) {
-        for app in apps {
-            // Check if any appDefinition has a bot
-            let defs = app
-                .get("appDefinitions")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default();
-
-            let has_bot = defs.iter().any(|d| {
-                d.get("bot").is_some()
-                    || d.get("description")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_lowercase().contains("copilot") || s.to_lowercase().contains("bot"))
-                        .unwrap_or(false)
-            });
-
-            if has_bot || !defs.is_empty() {
-                let name = defs
-                    .first()
-                    .and_then(|d| d.get("displayName"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Unknown Bot");
-                let desc = defs
-                    .first()
-                    .and_then(|d| d.get("shortDescription"))
-                    .and_then(|v| v.as_str());
-                let id = app
-                    .get("id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-
-                bots.push(StudioBot {
-                    id: id.to_string(),
-                    name: name.to_string(),
-                    description: desc.map(String::from),
-                    status: Some("published".to_string()),
-                    environment_id: None,
-                    created_on: None,
-                    modified_on: None,
-                });
+        match list_bots(&api_url, &dv_token).await {
+            Ok(mut bots) => {
+                let env_display = env.display_name.clone().unwrap_or_else(|| env.name.clone());
+                log::info!("[studio] env '{}': {} bots", env_display, bots.len());
+                for b in &mut bots {
+                    b.environment_id = Some(env.id.clone());
+                    b.environment_name = Some(env_display.clone());
+                }
+                all_bots.extend(bots);
+            }
+            Err(e) => {
+                log::warn!("[studio] failed to list bots in env '{}': {e}", env.display_name.as_deref().unwrap_or(&env.name));
             }
         }
     }
 
-    Ok(bots)
+    Ok(all_bots)
 }

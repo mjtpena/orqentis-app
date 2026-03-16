@@ -48,7 +48,7 @@ pub type Result<T> = std::result::Result<T, FoundryError>;
 
 const API_AGENTS: &str = "2024-05-01-preview";
 const API_DEPLOYMENTS: &str = "2024-10-01-preview";
-const API_MODELS: &str = "2024-10-21";
+const API_MODELS: &str = "2024-05-01-preview";
 
 // ---------------------------------------------------------------------------
 // Response / request types

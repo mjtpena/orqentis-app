@@ -48,8 +48,8 @@
     loading = true;
     error = null;
     Promise.all([
-      api.listFineTuningJobs(endpoint),
-      api.listBatchJobs(endpoint),
+      api.listFineTuningJobs(endpoint).catch(() => [] as FineTuningJob[]),
+      api.listBatchJobs(endpoint).catch(() => [] as BatchJob[]),
     ])
       .then(([ftJobs, batchJobs]) => {
         liveRuns = [

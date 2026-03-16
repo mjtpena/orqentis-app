@@ -12,7 +12,7 @@
   import ConnectionsPage from './lib/components/ConnectionsPage.svelte';
   import CostsPage from './lib/components/CostsPage.svelte';
   import TrustPage from './lib/components/TrustPage.svelte';
-  import { currentPage, navigateTo } from './lib/stores/navigation';
+  import { currentPage, navigateTo, theme, toggleTheme } from './lib/stores/navigation';
   import { authStatus, authLoading, authError, signIn, signOut, checkAuth, discoveryLoading, discoveryError } from './lib/stores/auth';
 
   const pageTitles: Record<string, string> = {
@@ -44,6 +44,9 @@
           <input placeholder="Search everything…">
         </div>
         <button class="btn-icon" title="Notifications">🔔</button>
+        <button class="btn-icon theme-toggle" title="Toggle theme" onclick={toggleTheme}>
+          {#if $theme === 'dark'}☀️{:else}🌙{/if}
+        </button>
 
         {#if $authLoading || $discoveryLoading}
           <span class="auth-status-connecting">⟳ Connecting…</span>

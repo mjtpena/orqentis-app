@@ -157,6 +157,9 @@
   .conn-dot--connected { background: #34d399; }
   .conn-dot--loading { background: #fbbf24; animation: conn-pulse 1s ease-in-out infinite; }
   .conn-dot--disconnected { background: var(--text-3); opacity: .4; }
+
+  :global([data-theme="light"]) .conn-dot--connected { background: #059669; }
+  :global([data-theme="light"]) .conn-dot--loading { background: #d97706; }
   @keyframes conn-pulse {
     0%, 100% { opacity: .4; }
     50% { opacity: 1; }

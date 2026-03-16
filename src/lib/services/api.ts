@@ -56,7 +56,7 @@ export interface ArmConnection {
   properties: {
     category?: string;
     target?: string;
-    metadata?: { resource_id?: string };
+    metadata?: { ResourceId?: string };
   };
 }
 
@@ -139,6 +139,7 @@ export interface StudioBot {
   description?: string | null;
   status?: string | null;
   environment_id?: string | null;
+  environment_name?: string | null;
   created_on?: string | null;
   modified_on?: string | null;
 }
@@ -301,4 +302,39 @@ export async function listM365Agents(): Promise<M365Agent[]> {
 
 export async function listLocalAgents(): Promise<LocalAgent[]> {
   return invoke("list_local_agents");
+}
+
+// ---- Usage Metrics ----
+export interface UsageMetrics {
+  totalCalls: number;
+  successfulCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  daily: DailyMetric[];
+  cost: CostSummary | null;
+}
+
+export interface DailyMetric {
+  date: string;
+  totalCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+}
+
+export interface CostSummary {
+  totalCost: number;
+  currency: string;
+  daily: DailyCost[];
+}
+
+export interface DailyCost {
+  date: string;
+  cost: number;
+}
+
+export async function getUsageMetrics(
+  aiServicesResourceId: string,
+): Promise<UsageMetrics> {
+  return invoke("get_usage_metrics", { aiServicesResourceId });
 }

@@ -155,6 +155,104 @@ struct CognitiveAccountProperties {
 }
 
 // ---------------------------------------------------------------------------
+// Usage metrics types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricResponse {
+    pub value: Vec<MetricItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricItem {
+    pub name: MetricName,
+    pub timeseries: Vec<TimeSeries>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricName {
+    pub value: String,
+    pub localized_value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeSeries {
+    pub data: Vec<MetricDataPoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricDataPoint {
+    pub time_stamp: String,
+    #[serde(default)]
+    pub total: Option<f64>,
+}
+
+/// Aggregated usage metrics returned to the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageMetrics {
+    pub total_calls: f64,
+    pub successful_calls: f64,
+    pub prompt_tokens: f64,
+    pub completion_tokens: f64,
+    pub total_tokens: f64,
+    /// Daily breakdown for charts
+    pub daily: Vec<DailyMetric>,
+    /// Cost data from Azure Cost Management
+    pub cost: Option<CostSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyMetric {
+    pub date: String,
+    pub total_calls: f64,
+    pub prompt_tokens: f64,
+    pub completion_tokens: f64,
+}
+
+// ---------------------------------------------------------------------------
+// Cost Management types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CostSummary {
+    pub total_cost: f64,
+    pub currency: String,
+    pub daily: Vec<DailyCost>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyCost {
+    pub date: String,
+    pub cost: f64,
+}
+
+/// Raw response from Azure Cost Management Query API
+#[derive(Debug, Clone, Deserialize)]
+pub struct CostQueryResponse {
+    pub properties: CostQueryProperties,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CostQueryProperties {
+    pub columns: Vec<CostQueryColumn>,
+    pub rows: Vec<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CostQueryColumn {
+    pub name: String,
+}
+
+// ---------------------------------------------------------------------------
 // Discovery result
 // ---------------------------------------------------------------------------
 
@@ -196,7 +294,27 @@ fn client() -> reqwest::Client {
 
 async fn arm_get<T: serde::de::DeserializeOwned>(token: &str, url: &str) -> Result<T, ArmError> {
     let resp = client().get(url).headers(build_headers(token)).send().await?;
+    parse_arm_response(resp, url).await
+}
 
+async fn arm_post<T: serde::de::DeserializeOwned, B: Serialize>(
+    token: &str,
+    url: &str,
+    body: &B,
+) -> Result<T, ArmError> {
+    let resp = client()
+        .post(url)
+        .headers(build_headers(token))
+        .json(body)
+        .send()
+        .await?;
+    parse_arm_response(resp, url).await
+}
+
+async fn parse_arm_response<T: serde::de::DeserializeOwned>(
+    resp: reqwest::Response,
+    url: &str,
+) -> Result<T, ArmError> {
     let status = resp.status();
     if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
         let body = resp.text().await.unwrap_or_default();
@@ -373,5 +491,182 @@ pub async fn discover_all(token: &str) -> Result<DiscoveryResult, ArmError> {
         subscriptions,
         workspaces: all_workspaces,
         hubs: hub_details,
+    })
+}
+
+/// Query Azure Monitor metrics for an AI Services resource.
+///
+/// Fetches processed prompt/completion tokens, successful calls, and total calls
+/// for the last 30 days with daily granularity.
+pub async fn query_usage_metrics(
+    token: &str,
+    ai_services_resource_id: &str,
+) -> Result<UsageMetrics, ArmError> {
+    let now = chrono::Utc::now();
+    let thirty_days_ago = now - chrono::Duration::days(30);
+    let timespan = format!(
+        "{}/{}",
+        thirty_days_ago.format("%Y-%m-%dT00:00:00Z"),
+        now.format("%Y-%m-%dT23:59:59Z")
+    );
+
+    let metric_names = "ProcessedPromptTokens,GeneratedTokens,SuccessfulCalls,TotalCalls";
+
+    let url = format!(
+        "{BASE_URL}{ai_services_resource_id}/providers/microsoft.insights/metrics\
+         ?api-version=2024-02-01\
+         &metricnames={metric_names}\
+         &timespan={timespan}\
+         &interval=P1D\
+         &aggregation=total"
+    );
+
+    let resp: MetricResponse = arm_get(token, &url).await?;
+
+    // Parse the metric response into our aggregated structure
+    let mut total_calls = 0.0_f64;
+    let mut successful_calls = 0.0_f64;
+    let mut prompt_tokens = 0.0_f64;
+    let mut completion_tokens = 0.0_f64;
+
+    // Collect daily data keyed by date
+    let mut daily_map: std::collections::BTreeMap<String, DailyMetric> =
+        std::collections::BTreeMap::new();
+
+    for metric in &resp.value {
+        let name = metric.name.value.as_str();
+        for ts in &metric.timeseries {
+            for dp in &ts.data {
+                let val = dp.total.unwrap_or(0.0);
+                let date = dp.time_stamp.split('T').next().unwrap_or("").to_string();
+
+                let entry = daily_map.entry(date.clone()).or_insert(DailyMetric {
+                    date: date.clone(),
+                    total_calls: 0.0,
+                    prompt_tokens: 0.0,
+                    completion_tokens: 0.0,
+                });
+
+                match name {
+                    "ProcessedPromptTokens" => {
+                        prompt_tokens += val;
+                        entry.prompt_tokens += val;
+                    }
+                    "GeneratedTokens" => {
+                        completion_tokens += val;
+                        entry.completion_tokens += val;
+                    }
+                    "SuccessfulCalls" => {
+                        successful_calls += val;
+                    }
+                    "TotalCalls" => {
+                        total_calls += val;
+                        entry.total_calls += val;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // Fetch cost data from Azure Cost Management (best-effort)
+    let cost = query_cost_data(token, ai_services_resource_id).await.ok();
+
+    Ok(UsageMetrics {
+        total_calls,
+        successful_calls,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens: prompt_tokens + completion_tokens,
+        daily: daily_map.into_values().collect(),
+        cost,
+    })
+}
+
+/// Query Azure Cost Management for actual dollar costs of an AI Services resource.
+pub async fn query_cost_data(
+    token: &str,
+    ai_services_resource_id: &str,
+) -> Result<CostSummary, ArmError> {
+    // Extract subscription ID from resource ID
+    // Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/...
+    let parts: Vec<&str> = ai_services_resource_id.split('/').collect();
+    let sub_idx = parts.iter().position(|p| p.eq_ignore_ascii_case("subscriptions"))
+        .ok_or_else(|| ArmError::NotFound("cannot extract subscription from resource ID".into()))?;
+    let subscription_id = parts.get(sub_idx + 1)
+        .ok_or_else(|| ArmError::NotFound("invalid resource ID format".into()))?;
+
+    let now = chrono::Utc::now();
+    let thirty_days_ago = now - chrono::Duration::days(30);
+
+    let body = serde_json::json!({
+        "type": "ActualCost",
+        "timeframe": "Custom",
+        "timePeriod": {
+            "from": thirty_days_ago.format("%Y-%m-%dT00:00:00Z").to_string(),
+            "to": now.format("%Y-%m-%dT23:59:59Z").to_string()
+        },
+        "dataset": {
+            "granularity": "Daily",
+            "aggregation": {
+                "totalCost": {
+                    "name": "Cost",
+                    "function": "Sum"
+                }
+            },
+            "filter": {
+                "dimensions": {
+                    "name": "ResourceId",
+                    "operator": "In",
+                    "values": [ai_services_resource_id]
+                }
+            }
+        }
+    });
+
+    let url = format!(
+        "{BASE_URL}/subscriptions/{subscription_id}/providers/Microsoft.CostManagement/query?api-version=2023-11-01"
+    );
+
+    let resp: CostQueryResponse = arm_post(token, &url, &body).await?;
+
+    // Find column indices
+    let cost_idx = resp.properties.columns.iter().position(|c| c.name == "Cost").unwrap_or(0);
+    let date_idx = resp.properties.columns.iter().position(|c| c.name == "UsageDate").unwrap_or(1);
+    let currency_idx = resp.properties.columns.iter().position(|c| c.name == "Currency").unwrap_or(2);
+
+    let mut total_cost = 0.0_f64;
+    let mut currency = String::from("USD");
+    let mut daily: Vec<DailyCost> = Vec::new();
+
+    for row in &resp.properties.rows {
+        let cost_val = row.get(cost_idx)
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let date_val = row.get(date_idx)
+            .and_then(|v| v.as_i64().map(|n| n.to_string()).or_else(|| v.as_str().map(String::from)))
+            .unwrap_or_default();
+        if let Some(c) = row.get(currency_idx).and_then(|v| v.as_str()) {
+            currency = c.to_string();
+        }
+
+        // UsageDate comes as YYYYMMDD integer
+        let date_str = if date_val.len() == 8 {
+            format!("{}-{}-{}", &date_val[..4], &date_val[4..6], &date_val[6..8])
+        } else {
+            date_val
+        };
+
+        total_cost += cost_val;
+        daily.push(DailyCost {
+            date: date_str,
+            cost: cost_val,
+        });
+    }
+
+    Ok(CostSummary {
+        total_cost,
+        currency,
+        daily,
     })
 }

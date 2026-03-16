@@ -53,8 +53,11 @@ pub async fn list_m365_agents(graph_token: &str) -> Result<Vec<M365Agent>, Strin
     let mut agents = Vec::new();
 
     // 1. List org-published Teams apps (includes declarative agents / message extensions)
-    let teams_agents = list_teams_declarative_agents(graph_token).await.unwrap_or_default();
-    agents.extend(teams_agents);
+    //    Requires AppCatalog.Read.All — may fail with Azure CLI tokens
+    match list_teams_declarative_agents(graph_token).await {
+        Ok(teams_agents) => agents.extend(teams_agents),
+        Err(e) => log::warn!("[m365] Teams app catalog unavailable (likely missing AppCatalog.Read.All scope): {e}"),
+    }
 
     // 2. List Graph connectors (these extend M365 Copilot with external data)
     let connectors = list_graph_connectors(graph_token).await.unwrap_or_default();
