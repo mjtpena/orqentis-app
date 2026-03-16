@@ -70,9 +70,9 @@ export interface FoundryDeployment {
 
 export interface FoundryAgent {
   id: string;
-  name: string;
+  name: string | null;
   model: string;
-  instructions?: string;
+  instructions?: string | null;
   tools: Array<{ type: string }>;
   created_at: number;
 }
@@ -82,7 +82,7 @@ export interface FoundryFile {
   filename: string;
   bytes: number;
   purpose: string;
-  status: string;
+  status: string | null;
   created_at: number;
 }
 
@@ -90,8 +90,8 @@ export interface VectorStore {
   id: string;
   name: string;
   status: string;
-  file_counts: { total: number };
-  usage_bytes: number;
+  file_counts: { total: number } | null;
+  usage_bytes: number | null;
   created_at: number;
 }
 
@@ -99,25 +99,27 @@ export interface FineTuningJob {
   id: string;
   model: string;
   status: string;
-  training_file: string;
+  training_file: string | null;
   created_at: number;
-  finished_at?: number;
+  finished_at?: number | null;
+  fine_tuned_model?: string | null;
+  hyperparameters?: { n_epochs?: number } | null;
 }
 
 export interface BatchJob {
   id: string;
-  endpoint: string;
+  endpoint: string | null;
   status: string;
-  input_file_id: string;
-  completion_window: string;
+  input_file_id: string | null;
+  completion_window: string | null;
   created_at: number;
 }
 
 export interface FoundryModel {
   id: string;
-  object: string;
-  created: number;
-  owned_by: string;
+  object: string | null;
+  created: number | null;
+  owned_by: string | null;
 }
 
 export interface FoundryConnection {

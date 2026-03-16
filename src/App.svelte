@@ -13,7 +13,7 @@
   import CostsPage from './lib/components/CostsPage.svelte';
   import TrustPage from './lib/components/TrustPage.svelte';
   import { currentPage, navigateTo } from './lib/stores/navigation';
-  import { authStatus, authLoading, signIn, signOut, checkAuth, discoveryLoading } from './lib/stores/auth';
+  import { authStatus, authLoading, authError, signIn, signOut, checkAuth, discoveryLoading, discoveryError } from './lib/stores/auth';
 
   const pageTitles: Record<string, string> = {
     home: 'Home', agents: 'Agents', models: 'Models', chat: 'Chat',
@@ -78,6 +78,16 @@
       <ChatPage />
     {:else}
       <div class="content">
+        {#if $authError}
+          <div class="error-banner" style="margin:12px 20px 0;padding:10px 16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;font-size:.82rem;color:#ef4444;display:flex;align-items:center;gap:8px">
+            <span>⚠️</span> Auth error: {$authError}
+          </div>
+        {/if}
+        {#if $discoveryError}
+          <div class="error-banner" style="margin:12px 20px 0;padding:10px 16px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:.82rem;color:#f59e0b;display:flex;align-items:center;gap:8px">
+            <span>⚠️</span> Discovery failed: {$discoveryError} — some data may not be available.
+          </div>
+        {/if}
         {#if $currentPage === 'home'}
           <HomePage />
         {:else if $currentPage === 'agents'}

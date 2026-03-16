@@ -59,11 +59,13 @@ export async function checkAuth() {
   authError.set(null);
   try {
     const status = await api.getAuthStatus();
+    console.log('[auth] checkAuth status:', status);
     authStatus.set(status);
     if (status.signed_in) {
       await discover();
     }
   } catch (e: any) {
+    console.error('[auth] checkAuth failed:', e);
     authError.set(e?.toString() ?? "Unknown error");
   } finally {
     authLoading.set(false);
@@ -75,11 +77,13 @@ export async function signIn() {
   authError.set(null);
   try {
     const status = await api.signIn();
+    console.log('[auth] signIn status:', status);
     authStatus.set(status);
     if (status.signed_in) {
       await discover();
     }
   } catch (e: any) {
+    console.error('[auth] signIn failed:', e);
     authError.set(e?.toString() ?? "Sign-in failed");
   } finally {
     authLoading.set(false);
@@ -106,8 +110,10 @@ export async function discover() {
   discoveryError.set(null);
   try {
     const result = await api.discoverResources();
+    console.log('[auth] discover result:', result);
     discoveryResult.set(result);
   } catch (e: any) {
+    console.error('[auth] discover failed:', e);
     discoveryError.set(e?.toString() ?? "Discovery failed");
   } finally {
     discoveryLoading.set(false);

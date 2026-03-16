@@ -29,7 +29,7 @@
         .then((agents) => {
           liveAgents = agents;
         })
-        .catch(() => {})
+        .catch((e) => { console.error('[ChatPage] Failed to load agents:', e); })
         .finally(() => { deploymentsLoading = false; });
     } else {
       liveAgents = [];
@@ -206,8 +206,8 @@
           bind:value={selectedDeployment}
           style="font-size:.75rem;padding:4px 8px;border-radius:var(--radius-sm);background:var(--bg-2);border:1px solid var(--border);color:var(--text-1);margin-left:4px"
         >
-          {#each deployments as d (d.id)}
-            <option value={d.id}>{d.model.name}{d.model.version ? ` (${d.model.version})` : ''}</option>
+          {#each deployments as d (d.name)}
+            <option value={d.name}>{d.properties.model?.name ?? d.name}{d.properties.model?.version ? ` (${d.properties.model.version})` : ''}</option>
           {/each}
         </select>
       {/if}

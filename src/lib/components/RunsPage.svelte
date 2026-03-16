@@ -22,7 +22,7 @@
     return {
       id: j.id,
       name: `ft-${j.model}`,
-      description: `Fine-Tuning · ${j.training_file} · ${formatDate(j.created_at)}`,
+      description: `Fine-Tuning · ${j.training_file ?? 'unknown'} · ${formatDate(j.created_at)}`,
       type: 'fine_tuning',
       status: j.status === 'running' ? 'in_progress'
             : j.status === 'succeeded' ? 'succeeded'
@@ -34,8 +34,8 @@
   function mapBatchJob(j: BatchJob): Run {
     return {
       id: j.id,
-      name: `batch · ${j.endpoint}`,
-      description: `Foundry Batch · ${j.completion_window} · ${formatDate(j.created_at)}`,
+      name: `batch · ${j.endpoint ?? 'unknown'}`,
+      description: `Foundry Batch · ${j.completion_window ?? 'unknown'} · ${formatDate(j.created_at)}`,
       type: 'batch',
       status: j.status === 'in_progress' ? 'in_progress'
             : j.status === 'completed' ? 'completed'

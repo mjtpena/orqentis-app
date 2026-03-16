@@ -75,11 +75,12 @@ pub struct WorkspaceProperties {
 
 impl Workspace {
     pub fn is_hub(&self) -> bool {
-        self.kind == "hub" || self.kind == "default"
+        let k = self.kind.to_lowercase();
+        k == "hub" || k == "default"
     }
 
     pub fn is_project(&self) -> bool {
-        self.kind == "project"
+        self.kind.eq_ignore_ascii_case("project")
     }
 }
 

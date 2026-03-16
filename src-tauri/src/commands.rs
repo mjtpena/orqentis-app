@@ -182,7 +182,7 @@ pub async fn list_subscriptions() -> Result<Vec<arm::Subscription>, String> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn list_deployments(ai_services_resource_id: String) -> Result<Vec<arm::ArmDeployment>, String> {
     let token = get_arm_token().await?;
     arm::list_deployments(&token, &ai_services_resource_id)
@@ -247,7 +247,7 @@ pub async fn create_agent(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn delete_agent(endpoint: String, agent_id: String) -> Result<(), String> {
     let token = foundry_token().await?;
     let client = foundry::FoundryClient::new(&endpoint);
@@ -269,7 +269,7 @@ pub async fn list_files(endpoint: String) -> Result<Vec<foundry::FileObject>, St
     Ok(list.data)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn delete_file(endpoint: String, file_id: String) -> Result<(), String> {
     let token = foundry_token().await?;
     let client = foundry::FoundryClient::new(&endpoint);
@@ -345,7 +345,7 @@ pub async fn list_models(endpoint: String) -> Result<Vec<foundry::Model>, String
 // Chat commands
 // ===========================================================================
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn send_chat_message(
     app: tauri::AppHandle,
     endpoint: String,
@@ -404,7 +404,7 @@ pub async fn send_chat_message(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn send_agent_message(
     endpoint: String,
     agent_id: String,

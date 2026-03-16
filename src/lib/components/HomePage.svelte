@@ -13,7 +13,7 @@
   function mapFoundryAgent(fa: FoundryAgent): Agent {
     return {
       id: fa.id,
-      name: fa.name,
+      name: fa.name ?? fa.id,
       description: fa.instructions || `Model: ${fa.model}`,
       source: 'foundry',
       model: fa.model,
@@ -32,7 +32,7 @@
           liveAgents = agents.map(mapFoundryAgent);
           agentCount = agents.length;
         })
-        .catch(() => {})
+        .catch((e) => { console.error('[HomePage] Failed to load agents:', e); })
         .finally(() => { loading = false; });
     } else {
       agentCount = 0;

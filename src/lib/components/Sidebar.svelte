@@ -36,7 +36,7 @@
 
 <nav class="sidebar">
   <div class="sidebar-brand">
-    <div class="logo">O</div>
+    <img class="logo" src="/orqentis.png" alt="Orqentis" />
     <div>
       <div class="name">Orqentis</div>
       <div class="tag">Agent Control Plane</div>
@@ -107,9 +107,8 @@
     border-bottom: 1px solid var(--border);
   }
   .logo {
-    width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--gradient);
-    display: flex; align-items: center; justify-content: center;
-    font-size: .75rem; font-weight: 800; color: #fff;
+    width: 28px; height: 28px; border-radius: var(--radius-sm);
+    object-fit: contain;
   }
   .name { font-weight: 700; font-size: 1.05rem; letter-spacing: -.01em; }
   .tag { font-size: .62rem; color: var(--text-3); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }

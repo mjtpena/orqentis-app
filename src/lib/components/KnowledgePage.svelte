@@ -24,8 +24,8 @@
       id: vs.id,
       name: vs.name || vs.id,
       type: 'vector_store',
-      fileCount: vs.file_counts.total,
-      size: formatBytes(vs.usage_bytes),
+      fileCount: vs.file_counts?.total ?? 0,
+      size: formatBytes(vs.usage_bytes ?? 0),
       status: vs.status === 'completed' ? 'ready' : 'syncing',
     };
   }
@@ -37,7 +37,7 @@
       type: 'file',
       size: formatBytes(f.bytes),
       purpose: f.purpose,
-      status: f.status === 'processed' ? 'ready' : 'syncing',
+      status: (f.status ?? '') === 'processed' ? 'ready' : 'syncing',
       updatedAt: formatDate(f.created_at),
     };
   }
